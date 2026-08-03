@@ -1140,8 +1140,8 @@ class Ball {
             ctx.textBaseline = 'middle';
             
             let timerText = "⏳" + this.timer;
-            let badgeX = this.x + this.radius * 0.7;
-            let badgeY = this.y - this.radius * 0.7;
+            let badgeX = this.x + this.radius * 0.7; // そのまま
+            let badgeY = this.y - this.radius * 1.2; // Y座標をマイナスにして上に持ち上げる
 
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
             ctx.lineWidth = 4;
