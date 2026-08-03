@@ -549,14 +549,42 @@
 
 <script>
 /* =====================================================================
-   オーディオ管理 (BGM / SE)
+   オーディオ管理 (BGM / SE) - Web Audio API 対応版
 ===================================================================== */
+
+// --- Web Audio API の初期化 ---
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+// SE全体の音量を制御するための GainNode
+const seGainNode = audioCtx.createGain();
+seGainNode.connect(audioCtx.destination);
+
+// デコード済みの音声データを保持する変数
+let decideBuffer = null;
+let cancelBuffer = null;
+
+// 音声ファイルを非同期で読み込み、バッファに変換する関数
+async function loadAudioBuffer(url) {
+    try {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.error("Web Audio API の音声読み込みに失敗:", e);
+        return null;
+    }
+}
+
+// 初期化時にSEを事前ロード
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768898/oamshw3mojs1snz7mfqp_tdwqbp.m4a')
+    .then(buffer => decideBuffer = buffer);
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768899/ffxuqelyqtnus0yfckts_t2jttx.m4a')
+    .then(buffer => cancelBuffer = buffer);
+
+// --- BGMの設定 (長尺なので HTML5 Audio のままが推奨されます) ---
 const bgmAudio = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768472/atommic_billiards_loop_fqnn47.m4a');
 bgmAudio.loop = true;
-
-const seDecide = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768898/oamshw3mojs1snz7mfqp_tdwqbp.m4a');
-const seCancel = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768899/ffxuqelyqtnus0yfckts_t2jttx.m4a');
-
 let isBgmPlaying = false;
 
 // ボリューム設定読み込み
@@ -566,8 +594,7 @@ if (isNaN(savedBgmVol)) savedBgmVol = 0.4;
 if (isNaN(savedSeVol)) savedSeVol = 0.8;
 
 bgmAudio.volume = savedBgmVol;
-seDecide.volume = savedSeVol;
-seCancel.volume = savedSeVol;
+seGainNode.gain.value = savedSeVol; // SEの初期音量を設定
 
 // 初期UI反映
 document.getElementById('bgm-slider').value = savedBgmVol;
@@ -582,13 +609,15 @@ document.getElementById('bgm-slider').addEventListener('input', e => {
     document.getElementById('bgm-val').innerText = Math.round(vol * 100) + '%';
     localStorage.setItem('fusionBgmVolume', vol);
 });
+
+// 既存のHTML5 Audioのvolume変更処理を、GainNodeの変更処理に差し替え
 document.getElementById('se-slider').addEventListener('input', e => {
     let vol = parseFloat(e.target.value);
-    seDecide.volume = vol;
-    seCancel.volume = vol;
+    seGainNode.gain.value = vol;
     document.getElementById('se-val').innerText = Math.round(vol * 100) + '%';
     localStorage.setItem('fusionSeVolume', vol);
 });
+
 document.getElementById('se-slider').addEventListener('change', e => {
     playSeDecide(); // 変更後に確認音を鳴らす
 });
@@ -599,21 +628,41 @@ function playBgm() {
             isBgmPlaying = true;
         }).catch(e => console.log("BGM自動再生ブロック:", e));
     }
+    
+    // ユーザー操作時に Web Audio API のサスペンド状態を解除する（ブラウザの自動再生ポリシー対応）
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
 }
 
+// --- 指定範囲を切り出して再生する共通関数 ---
+function playAudioSlice(buffer, startTime, duration) {
+    if (!buffer) return; // 読み込み完了前は処理をスキップ
+
+    // BufferSourceを作成 (再生のたびに使い捨てのノードを作成するのがWeb Audio APIの仕様です)
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    
+    // 音量管理ノードへ接続
+    source.connect(seGainNode);
+    
+    // 再生実行: start(いつ再生するか, どこから再生するか, どれだけの時間再生するか)
+    source.start(0, startTime, duration);
+}
+
+// 0.015秒～0.3秒を再生 (再生時間は 0.3 - 0.015 = 0.285秒)
 function playSeDecide() {
     playBgm();
-    seDecide.currentTime = 0;
-    seDecide.play().catch(e=>{});
+    playAudioSlice(decideBuffer, 0.015, 0.285);
 }
 
+// 0.019秒～0.127秒を再生 (再生時間は 0.127 - 0.019 = 0.108秒)
 function playSeCancel() {
     playBgm();
-    seCancel.currentTime = 0;
-    seCancel.play().catch(e=>{});
+    playAudioSlice(cancelBuffer, 0.019, 0.108);
 }
 
-// 初回タップでBGM再生
+// 初回タップでBGM再生とAudioContextの有効化
 document.body.addEventListener('pointerdown', playBgm, { once: true });
 
 
