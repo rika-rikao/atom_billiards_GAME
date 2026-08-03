@@ -1959,23 +1959,24 @@ spinUI.addEventListener('pointerup', stopSpinDrag);
 spinUI.addEventListener('pointercancel', stopSpinDrag);
 
 // --- ショット操作ポインターイベント ---
-window.addEventListener('pointerdown', e => {
-    if(e.target.tagName === 'BUTTON' || spinUI.contains(e.target) || e.target.tagName === 'INPUT') return;
-    
-    if (gameState === 'IDLE') {
-        if (e.target === canvas) {
-            let cue = balls.find(b => b.isCue);
-            if(cue) {
-                let pos = getLogicalPos(e.clientX, e.clientY);
-                let dist = Math.hypot(pos.x - cue.x, pos.y - cue.y);
-                if(dist < cue.radius * 3.5) {
-                    isDragging = true;
-                    isCancelDrag = false;
-                    dragStartX = cue.x;
-                    dragStartY = cue.y;
-                    dragCurrentX = pos.x; dragCurrentY = pos.y;
-                }
-            }
+// window.addEventListener('pointerdown', e => { ... }) の中
+if (e.target === canvas) {
+    let cue = balls.find(b => b.isCue);
+    if(cue) {
+        let pos = getLogicalPos(e.clientX, e.clientY);
+        
+        // 距離判定を削除し、画面のどこでも引っ張り開始できるようにする
+        isDragging = true;
+        isCancelDrag = false;
+        
+        // 始点を「玉の位置」ではなく「タップした位置」にする
+        dragStartX = pos.x;
+        dragStartY = pos.y;
+        dragCurrentX = pos.x; 
+        dragCurrentY = pos.y;
+    }
+}
+
         }
     } else if (gameState === 'MOVING') {
         if (Date.now() - shootTime <= 5000) {
@@ -1987,21 +1988,23 @@ window.addEventListener('pointerdown', e => {
     }
 });
 
-window.addEventListener('pointermove', e => {
-    if (isDragging) {
-        let pos = getLogicalPos(e.clientX, e.clientY);
-        dragCurrentX = pos.x; dragCurrentY = pos.y;
+// window.addEventListener('pointermove', e => { ... }) の中
+if (isDragging) {
+    let pos = getLogicalPos(e.clientX, e.clientY);
+    dragCurrentX = pos.x; dragCurrentY = pos.y;
 
-        let cue = balls.find(b => b.isCue);
-        if (cue) {
-            let distToCue = Math.hypot(pos.x - cue.x, pos.y - cue.y);
-            if (distToCue <= cue.radius) {
-                isCancelDrag = true;
-            } else {
-                isCancelDrag = false;
-            }
+    let cue = balls.find(b => b.isCue);
+    if (cue) {
+        // 玉との距離ではなく、「タップした始点」との距離でキャンセル判定
+        let distFromStart = Math.hypot(pos.x - dragStartX, pos.y - dragStartY);
+        if (distFromStart <= 20) { // 始点から20px以内に戻したらキャンセル
+            isCancelDrag = true;
+        } else {
+            isCancelDrag = false;
         }
     }
+}
+
 });
 
 window.addEventListener('pointerup', e => {
