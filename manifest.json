@@ -1,0 +1,22 @@
+{
+  "name": "Inertial Fusion - 慣性核融合",
+  "short_name": "Inertial Fusion",
+  "description": "慣性核融合ビリヤードパズルゲーム",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1a261f",
+  "theme_color": "#152219",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
