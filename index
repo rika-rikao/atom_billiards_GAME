@@ -1,0 +1,1961 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>慣性核融合 - ビリヤードスタイル (黒板サイエンススタイル)</title>
+    <style>
+        /* === PRESERVED GAME SYSTEM: 黒板＆サイエンス風カラーパレット === */
+        :root {
+            --bg-color: #1a261f;            /* レイヤー1：部屋/外装（深みのある黒板背景） */
+            --board-border: #2b1d14;         /* レイヤー2：木枠・外壁クッション（ダークウォルナット） */
+            --play-area-bg: #152219;        /* レイヤー3：黒板・原子移動エリア（深いグリーンボード） */
+            
+            --text-main: #ece6d8;           /* チョーク風のやわらかい白 */
+            --text-light: #ffffff;
+            --btn-bg: #324738;              /* 黒板に馴染む深い緑系ボタン */
+            --btn-hover: #405b48;
+            --box-bg: #223328;              /* UI枠・木枠調パーツ */
+            --cell-empty: #2a3d31;          /* 未発見マス・チョークトーン */
+            --accent: #d4af37;              /* 真鍮・金賞風アクセント */
+            --accent-red: #c0392b;          /* 朱色チョーク風 */
+            
+            --cell-seen: #889e5c;      /* 出現済み：落ち着いたグリーンチョーク色 */
+            --cell-cleared: #d4af37;   /* クリア生成済み：アンティークゴールド */
+        }
+
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            width: 100%; height: 100dvh;
+            background-color: var(--bg-color); color: var(--text-main);
+            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            touch-action: none; user-select: none;
+        }
+
+        /* スクリーン管理 */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: flex-start;
+            overflow-y: auto; overflow-x: hidden; box-sizing: border-box;
+        }
+        .screen.active { display: flex; }
+
+        /* タイトル画面 */
+        #title-screen { padding: 40px 0 20px 0; justify-content: center; position: relative; }
+        #title-screen h1 {
+            font-size: 3rem; color: var(--text-main); margin-bottom: 25px;
+            text-align: center; font-weight: bold;
+            letter-spacing: 2px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .title-nav-center {
+            display: flex; justify-content: center; width: 100%; margin-bottom: 25px;
+        }
+        
+        .top-nav-container {
+            position: absolute; top: 15px; right: 15px;
+            display: flex; gap: 8px; z-index: 20;
+        }
+
+        .top-nav-btn {
+            background: var(--box-bg); color: var(--text-main);
+            border: 1px solid #4a6351; border-radius: 8px;
+            padding: 10px 20px; font-size: 1rem; font-weight: bold;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            display: flex; align-items: center; gap: 4px;
+        }
+        .top-nav-btn:hover {
+            background: var(--btn-hover); color: var(--text-light); border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+        .top-nav-btn:active { transform: translateY(1px); }
+
+        .mode-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px; 
+            width: 90%; max-width: 800px; margin: 0 auto;
+        }
+        @media (max-width: 600px) {
+            .mode-grid { grid-template-columns: 1fr; gap: 12px; }
+        }
+        
+        .mode-btn {
+            background: #2a3a4e; color: var(--text-light);
+            border: 1px solid #4a627a; border-radius: 8px;
+            padding: 15px 25px; margin: 0; width: 100%; height: 100%; box-sizing: border-box;
+            font-size: 1.1rem; cursor: pointer; transition: background 0.2s, transform 0.1s;
+            text-align: left; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .mode-btn:hover { background: #384c66; }
+        .mode-btn:active { transform: translateY(2px); box-shadow: 0 2px 3px rgba(0,0,0,0.2); }
+        .mode-title { font-weight: bold; font-size: 1.2rem; display: block; margin-bottom: 5px; }
+        .mode-desc { font-size: 0.85rem; opacity: 0.9; }
+
+        /* === PRESERVED GAME SYSTEM: 周期表・実績画面 UI === */
+        #periodic-table-screen { padding-top: 15px; padding-bottom: 40px; }
+        .pt-header { 
+            display: flex; justify-content: space-between; width: 95%; max-width: 1000px; 
+            margin-bottom: 10px; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .pt-stats {
+            background: var(--box-bg); color: var(--text-light);
+            padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 0.95rem;
+            border: 1px solid #3e5645;
+        }
+        
+        .pt-legend {
+            display: flex; gap: 15px; font-size: 0.85rem; margin-bottom: 12px;
+            background: rgba(34, 51, 40, 0.5); padding: 6px 12px; border-radius: 6px;
+            border: 1px solid #3e5645;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.2); }
+        
+        .pt-grid {
+            display: grid; 
+            grid-template-columns: repeat(18, minmax(0, 1fr)); 
+            grid-template-rows: repeat(10, minmax(0, 1fr));
+            gap: 3px; width: 95%; max-width: 1000px; margin-bottom: 15px;
+        }
+        .pt-cell {
+            aspect-ratio: 1; background: var(--cell-empty); 
+            border-radius: 3px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; color: rgba(236,230,216,0.4);
+            font-size: clamp(0.35rem, 1.8vw, 0.75rem);
+            transition: all 0.3s ease; border: 1px solid #1f2e24;
+        }
+        .pt-cell.seen { 
+            background: var(--cell-seen); color: #1a261f; 
+            box-shadow: 0 0 4px rgba(136, 158, 92, 0.6);
+            border-color: #a4be75;
+        }
+        .pt-cell.cleared { 
+            background: var(--cell-cleared); color: #1f1803; 
+            box-shadow: 0 0 8px rgba(212, 175, 55, 0.6); 
+            font-weight: bold; border-color: #f7e082;
+        }
+        .pt-cell .pt-z { font-size: 0.55em; opacity: 0.8; }
+        .pt-cell .pt-sym { font-weight: bold; font-size: 1.15em; }
+
+        /* === PRESERVED GAME SYSTEM: ゲーム画面レイアウト === */
+        #game-layout {
+            display: flex; width: 100%; height: 100dvh;
+            background-color: var(--bg-color);
+            overflow: hidden; box-sizing: border-box;
+        }
+
+        @media (orientation: portrait) {
+            #game-layout { flex-direction: column; }
+            #game-ui-top {
+                width: 100%; padding: 8px 12px; box-sizing: border-box;
+                display: flex; justify-content: space-between; align-items: center;
+                background: var(--bg-color); z-index: 10; flex-shrink: 0;
+            }
+            #game-board-wrapper {
+                width: 100%; flex: 1;
+                background-color: var(--board-border); 
+                padding: 12px; box-sizing: border-box;
+                display: flex; justify-content: center; align-items: center;
+                position: relative; overflow: hidden;
+                box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+            }
+            #game-ui-bottom {
+                width: 100%; padding: 10px 15px; box-sizing: border-box;
+                display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+                background: var(--bg-color); z-index: 10; flex-shrink: 0; gap: 8px;
+            }
+            canvas#gameCanvas { aspect-ratio: 1 / 2; }
+        }
+
+        @media (orientation: landscape) {
+            #game-layout { flex-direction: row; }
+            #game-board-wrapper {
+                height: 100%; flex: 1;
+                background-color: var(--board-border);
+                padding: 12px; box-sizing: border-box;
+                display: flex; justify-content: center; align-items: center;
+                position: relative; overflow: hidden;
+                box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+            }
+            #game-ui-top { display: none; }
+            #game-ui-bottom {
+                height: 100%; width: 290px; flex-shrink: 0;
+                display: flex; flex-direction: column; justify-content: space-between;
+                align-items: center; padding: 15px; box-sizing: border-box;
+                background: var(--bg-color);
+            }
+            canvas#gameCanvas { aspect-ratio: 2 / 1; }
+        }
+
+        canvas#gameCanvas {
+            max-width: 100%; max-height: 100%;
+            display: block; object-fit: contain;
+            background-color: var(--play-area-bg);
+            box-shadow: 0 0 15px rgba(0,0,0,0.7);
+            border: 2px solid #3c5443;
+        }
+
+        .header-box {
+            background: var(--box-bg); color: var(--text-light);
+            padding: 4px 8px; border-radius: 6px; text-align: center;
+            flex: 1; min-width: 60px; border: 1px solid #3e5645;
+        }
+        .header-box.large-current {
+            background: #193322; border: 2px solid var(--accent);
+        }
+        .header-label { font-size: 0.65rem; text-transform: uppercase; color: #a8bba8; letter-spacing: 1px; }
+        .header-value { font-size: 1.1rem; font-weight: bold; }
+        .header-value.large { font-size: 1.5rem; color: #ffd700; line-height: 1.1; }
+        
+        #ui-turns-top.danger, #ui-turns-side.danger { color: #e74c3c; }
+        
+        .header-btn {
+            background: var(--btn-bg); color: var(--text-light); border: 1px solid #4a6351;
+            padding: 8px 12px; border-radius: 6px; cursor: pointer; 
+            font-weight: bold; font-size: 0.9rem; flex-shrink: 0;
+        }
+        .reset-btn {
+            background: #a93226; color: white; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer;
+            font-weight: bold; font-size: 0.85rem;
+        }
+
+        .hint {
+            font-size: 0.85rem; color: var(--text-main);
+            background: var(--box-bg); padding: 8px 10px; border-radius: 8px;
+            font-weight: bold; text-align: center; box-sizing: border-box;
+            width: 100%; max-width: 260px; line-height: 1.3; border: 1px solid #3e5645;
+        }
+
+        .cue-status-group {
+            display: flex; gap: 8px; justify-content: center; align-items: center; width: 100%; max-width: 260px;
+        }
+
+        .landscape-header {
+            display: none; width: 100%; flex-direction: column; gap: 8px;
+        }
+        @media (orientation: landscape) {
+            .landscape-header { display: flex; }
+        }
+
+        /* === PRESERVED GAME SYSTEM: 白玉打点(スピン)UI === */
+        #spin-container {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 4px; touch-action: none; width: 100%; max-width: 200px;
+        }
+        #spin-ui {
+            width: 76px; height: 76px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #ffffff 0%, #e6e6e6 60%, #cccccc 100%);
+            border: 2px solid #aaaaaa; box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            position: relative; touch-action: none; cursor: crosshair;
+        }
+        #spin-marker {
+            position: absolute; width: 14px; height: 14px;
+            background: #c0392b; border-radius: 50%;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; border: 2px solid #fff;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+
+        /* モーダル群 */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 20, 14, 0.85); z-index: 100;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: var(--bg-color); padding: 20px; border-radius: 12px;
+            text-align: center; width: 90%; max-width: 480px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            border: 2px solid #3e5645; box-sizing: border-box;
+        }
+        .modal-title { font-size: 1.8rem; margin: 0 0 10px 0; color: var(--text-main); font-weight: bold; }
+        .modal-desc { margin-bottom: 15px; color: var(--text-main); font-size: 0.95rem; line-height: 1.4; white-space: pre-line; }
+        
+        .modal-btn {
+            background-color: var(--btn-bg); color: var(--text-light); border: 1px solid #4a6351;
+            padding: 10px 0; border-radius: 6px; font-size: 1rem; font-weight: bold;
+            cursor: pointer; width: 100%; margin-bottom: 8px;
+        }
+        .modal-btn.secondary { background-color: var(--box-bg); color: var(--text-main); margin-bottom: 0; }
+        .modal-btn.danger { background-color: #a93226; color: white; border: none; }
+
+        .crown-section { width: 100%; text-align: left; }
+        .crown-grid-compact {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px;
+        }
+        .crown-card-compact {
+            background: var(--box-bg); border-radius: 6px; padding: 6px 8px;
+            border: 1px solid #3e5645; display: flex; align-items: center; gap: 8px;
+            opacity: 0.55; filter: grayscale(90%); transition: all 0.2s;
+        }
+        .crown-card-compact.unlocked {
+            opacity: 1.0; filter: grayscale(0%);
+            border-color: var(--accent); background: #233829;
+            box-shadow: 0 2px 5px rgba(212, 175, 55, 0.3);
+        }
+        .crown-icon-compact { font-size: 1.3rem; flex-shrink: 0; }
+        .crown-info-compact { flex: 1; min-width: 0; }
+        .crown-name-compact { font-weight: bold; font-size: 0.75rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .crown-progress-compact { font-size: 0.68rem; font-weight: bold; color: var(--accent); margin-top: 1px; }
+
+        /* スライダー用スタイル */
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: transparent;
+        }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 8px; cursor: pointer;
+            background: #2b3d31; border-radius: 4px; border: 1px solid #3e5645;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 20px; width: 20px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+            -webkit-appearance: none; margin-top: -7px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. タイトル画面 -->
+    <div id="title-screen" class="screen active">
+        
+        <h1>Inertial Fusion</h1>
+
+        <!-- 音量設定ボタン -->
+        <div class="top-nav-container">
+            <button class="top-nav-btn" onclick="playSeDecide(); openModal('config-modal')">⚙️ 音量設定</button>
+        </div>
+
+        <!-- 説明書ボタン -->
+        <div class="title-nav-center">
+            <button class="top-nav-btn" onclick="playSeDecide(); openModal('rule-modal')">📖 ルール・説明書</button>
+        </div>
+
+        <!-- モード選択ボタン群 -->
+        <div class="mode-grid">
+            <button class="mode-btn" onclick="playSeDecide(); startGame(0)">
+                <span class="mode-title">カジュアル</span>
+                <span class="mode-desc">速度制限なし / 半減期なし<br>触れるだけで融合。初心者向け</span>
+            </button>
+            <button class="mode-btn" onclick="playSeDecide(); startGame(1)">
+                <span class="mode-title">スタンダード</span>
+                <span class="mode-desc">速度制限あり / 半減期なし<br>勢いよくぶつけないと融合しない</span>
+            </button>
+            <button class="mode-btn" onclick="playSeDecide(); startGame(2)">
+                <span class="mode-title">ハード</span>
+                <span class="mode-desc">速度制限あり / 半減期あり<br>自壊時の中性子線で周りが＋1変化！</span>
+            </button>
+            <button class="mode-btn" onclick="playSeDecide(); startGame(3)" style="border-color: var(--accent);">
+                <span class="mode-title" style="color:var(--accent);">エキスパート</span>
+                <span class="mode-desc">全縛り＋番号表示なし＋ターン制限<br>達成状況が周期表・王冠に記録されます</span>
+            </button>
+        </div>
+
+        <!-- 実績記録ボタン -->
+        <div class="title-nav-center" style="margin-top: 25px;">
+            <button class="top-nav-btn" style="padding: 12px 24px; font-size: 1.1rem; background: #233829; border-color: var(--accent); box-shadow: 0 4px 10px rgba(0,0,0,0.6);" onclick="playSeDecide(); switchScreen('periodic-table-screen'); renderPeriodicTable();">👑 周期表・実績記録を見る</button>
+        </div>
+    </div>
+
+    <!-- 2. 周期表・実績画面 -->
+    <div id="periodic-table-screen" class="screen">
+        <div class="pt-header">
+            <h2 style="margin:0; font-size:1.4rem;">実績＆元素記録</h2>
+            <div class="pt-stats" id="pt-stats-text">残り: 118 / 118</div>
+            <div style="display:flex; gap:8px;">
+                <button class="reset-btn" onclick="playSeCancel(); openResetModal1()">🗑 リセット</button>
+                <button class="header-btn" style="background:var(--box-bg); border-color:var(--accent); color:var(--accent);" onclick="playSeDecide(); openCrownModal()">👑 獲得クラウン</button>
+                <button class="header-btn" onclick="playSeCancel(); switchScreen('title-screen')">戻る</button>
+            </div>
+        </div>
+        
+        <div class="pt-legend">
+            <div class="legend-item"><div class="legend-box" style="background:var(--cell-empty);"></div> 未出現</div>
+            <div class="legend-item"><div class="legend-box" style="background:var(--cell-seen);"></div> 盤面出現済み</div>
+            <div class="legend-item"><div class="legend-box" style="background:var(--cell-cleared);"></div> クリア生成済み</div>
+        </div>
+
+        <div class="pt-grid" id="pt-grid"></div>
+    </div>
+
+    <!-- 3. ゲーム画面 -->
+    <div id="game-screen" class="screen">
+        <div id="game-layout">
+            <!-- 縦画面の上部UI -->
+            <div id="game-ui-top">
+                <button class="header-btn" onclick="playSeCancel(); showGiveUpModal()">リタイア</button>
+                <div class="header-box" style="margin: 0 10px;">
+                    <div class="header-label">TARGET</div>
+                    <div class="header-value" id="ui-target-top">--</div>
+                </div>
+                <div class="header-box">
+                    <div class="header-label">TURNS</div>
+                    <div class="header-value" id="ui-turns-top">--</div>
+                </div>
+            </div>
+
+            <!-- レイヤー2：ゲームエリア外枠クッション -->
+            <div id="game-board-wrapper">
+                <!-- レイヤー3：原子移動エリア (Canvas) -->
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            
+            <!-- 画面下部UI -->
+            <div id="game-ui-bottom">
+                <!-- 横画面専用上部ヘッダー -->
+                <div class="landscape-header">
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <button class="header-btn" onclick="playSeCancel(); showGiveUpModal()">リタイア</button>
+                        <div class="header-box">
+                            <div class="header-label">TURNS</div>
+                            <div class="header-value" id="ui-turns-side">--</div>
+                        </div>
+                    </div>
+                    <div class="header-box" style="width:100%;">
+                        <div class="header-label">TARGET</div>
+                        <div class="header-value" id="ui-target-side">--</div>
+                    </div>
+                </div>
+
+                <!-- 表記エリア -->
+                <div class="hint" id="ui-hint">手球を引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(下のパネルで打点を事前設定)</span></div>
+                
+                <!-- CURRENT/NEXT -->
+                <div class="cue-status-group">
+                    <div class="header-box large-current">
+                        <div class="header-label">CURRENT</div>
+                        <div class="header-value large" id="ui-current-val">--</div>
+                    </div>
+                    <div class="header-box" style="background:#2b2214;">
+                        <div class="header-label">NEXT</div>
+                        <div class="header-value" id="ui-next-val">--</div>
+                    </div>
+                </div>
+
+                <!-- 打点（スピン設定）エリア ＋ ガイド切り替え -->
+                <div id="spin-container">
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; max-width:180px;">
+                        <span style="font-size: 0.85rem; color: var(--text-main); font-weight: bold;">打点(スピン)</span>
+                        <button id="guide-toggle-btn" style="background:var(--btn-bg); color:var(--text-light); border:1px solid #4a6351; border-radius:4px; padding:2px 8px; font-size:0.75rem; cursor:pointer;" onclick="playSeDecide(); toggleGuide()">ガイド: ON</button>
+                    </div>
+                    <div id="spin-ui">
+                        <div id="spin-marker"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダル群 -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">⚙️ 音量設定</h2>
+            <div style="text-align: left; margin: 15px 0 25px 0;">
+                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-weight:bold;">🎵 BGM</span> <span id="bgm-val">40%</span>
+                </label>
+                <input type="range" id="bgm-slider" min="0" max="1" step="0.01">
+                
+                <label style="display: flex; justify-content: space-between; margin-top: 20px; margin-bottom: 8px;">
+                    <span style="font-weight:bold;">🔊 SE</span> <span id="se-val">80%</span>
+                </label>
+                <input type="range" id="se-slider" min="0" max="1" step="0.01">
+            </div>
+            <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('config-modal')">閉じる</button>
+        </div>
+    </div>
+
+    <div id="rule-modal" class="modal">
+        <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
+            <h2 class="modal-title" style="text-align:center;">📖 ルール・説明書</h2>
+            <div class="modal-desc" style="font-size:0.95rem; line-height:1.6; color:var(--text-main); text-align:left;">
+                <p style="margin-top:0;"><strong>🎯 ゲームの目的</strong><br>
+                手球（CURRENT）を引っ張って飛ばし、盤面の原子にぶつけて合体させましょう。<br>
+                画面上部の「TARGET」と同じ原子を作ればクリアです！</p>
+                
+                <p><strong>🎱 操作方法</strong><br>
+                ・手球を引っぱって離すと発射！<br>
+                ・画面下の「スピン」をずらすとカーブがかけられます。<br>
+                <span style="font-size:0.85em; opacity:0.8;">※発射後5秒間は、画面をタップするごとにカーブの力が持続します。</span></p>
+                
+                <p><strong>💥 合体（核融合）のルール</strong><br>
+                ・勢いよくぶつけると原子同士が合体し、番号が足し算されます。（例: 1 + 2 = 3）<br>
+                ・合計が「118」を超えると、限界突破して爆発・分裂してしまいます！</p>
+
+                <p><strong>⏳ 寿命と爆発（ハード以上）</strong><br>
+                ・原子に付いている数字（⏳）はターン寿命です。0になると自爆します。<br>
+                ・爆発の波紋に触れた周りの原子は、番号が「+1」されてしまいます。</p>
+
+                <p><strong>💀 ゲームオーバー</strong><br>
+                以下のどちらかで失敗となります。<br>
+                ・ターン数（TURNS）が 0 になる<br>
+                ・盤面内に原子が「40個」以上あふれる</p>
+            </div>
+            <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('rule-modal')">閉じる</button>
+        </div>
+    </div>
+
+    <div id="crown-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">👑 獲得クラウン</h2>
+            <div class="crown-section">
+                <div class="crown-grid-compact" id="crown-grid"></div>
+            </div>
+            <button class="modal-btn secondary" style="margin-top:15px;" onclick="playSeCancel(); closeModal('crown-modal')">閉じる</button>
+        </div>
+    </div>
+
+    <div id="reset-modal-1" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title" style="color:#e74c3c;">⚠️ 記録のリセット</h2>
+            <div class="modal-desc">周期表の発見記録および獲得クラウンの実績データをすべて消去しますか？</div>
+            <button class="modal-btn danger" onclick="playSeCancel(); openResetModal2()">リセットに進む</button>
+            <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('reset-modal-1')">キャンセル</button>
+        </div>
+    </div>
+
+    <div id="reset-modal-2" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title" style="color:#e74c3c;">🚨 最終確認</h2>
+            <div class="modal-desc">本当によろしいですか？この操作は取り消せません。</div>
+            <button class="modal-btn danger" onclick="playSeCancel(); executeResetData()">全データを完全に削除する</button>
+            <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('reset-modal-2')">やめる</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modal-title" class="modal-title">CLEAR</h2>
+            <div id="modal-desc" class="modal-desc">目標元素の生成に成功しました！</div>
+            <button class="modal-btn" onclick="playSeDecide(); nextStage()">次のターゲットへ</button>
+            <button class="modal-btn secondary" onclick="playSeCancel(); returnToTitle()">タイトルへ戻る</button>
+        </div>
+    </div>
+
+    <div id="giveup-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">確認</h2>
+            <div class="modal-desc">現在のゲームを終了してタイトルに戻りますか？</div>
+            <button class="modal-btn" style="background:#b05530;" onclick="playSeCancel(); returnToTitle()">終了する</button>
+            <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('giveup-modal')">続ける</button>
+        </div>
+    </div>
+
+<script>
+/* =====================================================================
+   オーディオ管理 (BGM / SE)
+===================================================================== */
+const bgmAudio = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768472/atommic_billiards_loop_fqnn47.m4a');
+bgmAudio.loop = true;
+
+const seDecide = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768898/oamshw3mojs1snz7mfqp_tdwqbp.m4a');
+const seCancel = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768899/ffxuqelyqtnus0yfckts_t2jttx.m4a');
+
+let isBgmPlaying = false;
+
+// ボリューム設定読み込み
+let savedBgmVol = parseFloat(localStorage.getItem('fusionBgmVolume'));
+let savedSeVol = parseFloat(localStorage.getItem('fusionSeVolume'));
+if (isNaN(savedBgmVol)) savedBgmVol = 0.4;
+if (isNaN(savedSeVol)) savedSeVol = 0.8;
+
+bgmAudio.volume = savedBgmVol;
+seDecide.volume = savedSeVol;
+seCancel.volume = savedSeVol;
+
+// 初期UI反映
+document.getElementById('bgm-slider').value = savedBgmVol;
+document.getElementById('se-slider').value = savedSeVol;
+document.getElementById('bgm-val').innerText = Math.round(savedBgmVol * 100) + '%';
+document.getElementById('se-val').innerText = Math.round(savedSeVol * 100) + '%';
+
+// ボリューム変更イベント
+document.getElementById('bgm-slider').addEventListener('input', e => {
+    let vol = parseFloat(e.target.value);
+    bgmAudio.volume = vol;
+    document.getElementById('bgm-val').innerText = Math.round(vol * 100) + '%';
+    localStorage.setItem('fusionBgmVolume', vol);
+});
+document.getElementById('se-slider').addEventListener('input', e => {
+    let vol = parseFloat(e.target.value);
+    seDecide.volume = vol;
+    seCancel.volume = vol;
+    document.getElementById('se-val').innerText = Math.round(vol * 100) + '%';
+    localStorage.setItem('fusionSeVolume', vol);
+});
+document.getElementById('se-slider').addEventListener('change', e => {
+    playSeDecide(); // 変更後に確認音を鳴らす
+});
+
+function playBgm() {
+    if (!isBgmPlaying) {
+        bgmAudio.play().then(() => {
+            isBgmPlaying = true;
+        }).catch(e => console.log("BGM自動再生ブロック:", e));
+    }
+}
+
+function playSeDecide() {
+    playBgm();
+    seDecide.currentTime = 0;
+    seDecide.play().catch(e=>{});
+}
+
+function playSeCancel() {
+    playBgm();
+    seCancel.currentTime = 0;
+    seCancel.play().catch(e=>{});
+}
+
+// 初回タップでBGM再生
+document.body.addEventListener('pointerdown', playBgm, { once: true });
+
+
+/* =====================================================================
+ 【SYSTEM PRESERVED: 元素・グループ・ゲームシステム定義】
+===================================================================== */
+const ELEMENTS = {
+    1:"H", 2:"He", 3:"Li", 4:"Be", 5:"B", 6:"C", 7:"N", 8:"O", 9:"F", 10:"Ne",
+    11:"Na", 12:"Mg", 13:"Al", 14:"Si", 15:"P", 16:"S", 17:"Cl", 18:"Ar", 19:"K", 20:"Ca",
+    21:"Sc", 22:"Ti", 23:"V", 24:"Cr", 25:"Mn", 26:"Fe", 27:"Co", 28:"Ni", 29:"Cu", 30:"Zn",
+    31:"Ga", 32:"Ge", 33:"As", 34:"Se", 35:"Br", 36:"Kr", 37:"Rb", 38:"Sr", 39:"Y", 40:"Zr",
+    41:"Nb", 42:"Mo", 43:"Tc", 44:"Ru", 45:"Rh", 46:"Pd", 47:"Ag", 48:"Cd", 49:"In", 50:"Sn",
+    51:"Sb", 52:"Te", 53:"I", 54:"Xe", 55:"Cs", 56:"Ba", 57:"La", 58:"Ce", 59:"Pr", 60:"Nd",
+    61:"Pm", 62:"Sm", 63:"Eu", 64:"Gd", 65:"Tb", 66:"Dy", 67:"Ho", 68:"Er", 69:"Tm", 70:"Yb",
+    71:"Lu", 72:"Hf", 73:"Ta", 74:"W", 75:"Re", 76:"Os", 77:"Ir", 78:"Pt", 79:"Au", 80:"Hg",
+    81:"Tl", 82:"Pb", 83:"Bi", 84:"Po", 85:"At", 86:"Rn", 87:"Fr", 88:"Ra", 89:"Ac", 90:"Th",
+    91:"Pa", 92:"U", 93:"Np", 94:"Pu", 95:"Am", 96:"Cm", 97:"Bk", 98:"Cf", 99:"Es", 100:"Fm",
+    101:"Md", 102:"No", 103:"Lr", 104:"Rf", 105:"Db", 106:"Sg", 107:"Bh", 108:"Hs", 109:"Mt",
+    110:"Ds", 111:"Rg", 112:"Cn", 113:"Nh", 114:"Fl", 115:"Mc", 116:"Lv", 117:"Ts", 118:"Og"
+};
+
+const GROUPS = {
+    alkali: [3, 11, 19, 37, 55, 87],
+    alkalineEarth: [4, 12, 20, 38, 56, 88],
+    halogen: [9, 17, 35, 53, 85, 117],
+    nobleGas: [2, 10, 18, 36, 54, 86, 118],
+    preciousMetal: [29, 44, 45, 46, 47, 76, 77, 78, 79],
+    transition: [
+        21,22,23,24,25,26,27,28,29, 39,40,41,42,43,44,45,46,47,
+        57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,
+        89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111
+    ]
+};
+GROUPS.mainGroup = Array.from({length: 118}, (_, i) => i + 1).filter(z => !GROUPS.transition.includes(z));
+
+function getPTCoords(z) {
+    if (z === 1) return { r: 1, c: 1 };
+    if (z === 2) return { r: 1, c: 18 };
+    if (z >= 3 && z <= 4) return { r: 2, c: z - 2 };
+    if (z >= 5 && z <= 10) return { r: 2, c: z + 8 };
+    if (z >= 11 && z <= 12) return { r: 3, c: z - 10 };
+    if (z >= 13 && z <= 18) return { r: 3, c: z };
+    if (z >= 19 && z <= 36) return { r: 4, c: z - 18 };
+    if (z >= 37 && z <= 54) return { r: 5, c: z - 36 };
+    if (z >= 55 && z <= 56) return { r: 6, c: z - 54 };
+    if (z >= 72 && z <= 86) return { r: 6, c: z - 68 };
+    if (z >= 87 && z <= 88) return { r: 7, c: z - 86 };
+    if (z >= 104 && z <= 118) return { r: 7, c: z - 100 };
+    if (z >= 57 && z <= 71) return { r: 9, c: z - 53 };
+    if (z >= 89 && z <= 103) return { r: 10, c: z - 85 };
+    return { r: 1, c: 1 };
+}
+
+function getHalfLife(z) {
+    if (z <= 2) return null;
+    if (z === 26) return 20; 
+    if (z === 82) return 17; 
+    if (z > 100) return 2; 
+    if (z > 82) return 3; 
+    const nobleGases = [10, 18, 36, 54, 86];
+    if (nobleGases.includes(z)) return 12;
+    return 5 + (z % 4);
+}
+
+// --- システム設定 ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let cw = 1000, ch = 2000;
+let animationId;
+
+const BASE_FRICTION = 0.993;
+const STOP_THRESHOLD = 0.15;
+const RESTITUTION = 0.8; 
+const MAX_SPEED = 70; 
+
+let currentMode = 0;
+let balls = [];
+let particles = []; 
+let targetZ = 10;
+let nextCueZ = 1; 
+let turnsLeft = 10;
+let gameState = 'IDLE';
+
+let spawnTurnCounter = 0;
+let showGuide = true;
+
+let isDragging = false;
+let isSpinDragging = false;
+let isCancelDrag = false;
+let dragStartX, dragStartY, dragCurrentX, dragCurrentY;
+let shootTime = 0; 
+let setSpinX = 0;
+let setSpinY = 0;
+
+let requireSpeed = false, useHalfLife = false, hideZ = false;
+
+let seenElements = JSON.parse(localStorage.getItem('fusionSeenElements')) || [];
+let clearedElements = JSON.parse(localStorage.getItem('fusionClearedElements')) || [];
+
+function saveRecords() {
+    localStorage.setItem('fusionSeenElements', JSON.stringify(seenElements));
+    localStorage.setItem('fusionClearedElements', JSON.stringify(clearedElements));
+}
+
+function markSeen(z) {
+    if (currentMode === 3 && z >= 1 && z <= 118) {
+        if (!seenElements.includes(z)) {
+            seenElements.push(z);
+            saveRecords();
+        }
+    }
+}
+
+function markCleared(z) {
+    if (currentMode === 3 && z >= 1 && z <= 118) {
+        if (!clearedElements.includes(z)) {
+            clearedElements.push(z);
+        }
+        if (!seenElements.includes(z)) {
+            seenElements.push(z);
+        }
+        saveRecords();
+    }
+}
+
+function getRandomElementZ(excludeZ = null, isCueSpawn = false) {
+    let z;
+    let attempts = 0;
+    do {
+        attempts++;
+        if (isCueSpawn && targetZ <= 20 && Math.random() < 0.8) {
+            z = Math.floor(Math.random() * 15) + 1;
+        } else {
+            z = Math.floor(Math.random() * 118) + 1;
+        }
+    } while (excludeZ !== null && z === excludeZ && attempts < 100);
+    return z;
+}
+
+function getValidSpawnPosition(targetRadius, attempts = 300) {
+    const margin = 20;
+    for (let i = 0; i < attempts; i++) {
+        let x = targetRadius + margin + Math.random() * (cw - (targetRadius + margin) * 2);
+        let y = targetRadius + margin + Math.random() * (ch - (targetRadius + margin) * 2);
+        return { x, y }; // 生成後はresolveOverlapsで解決するため、ここではランダム座標をそのまま返す
+    }
+    return { x: cw/2, y: ch/2 };
+}
+
+function getLogicalPos(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = cw / rect.width;
+    const scaleY = ch / rect.height;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function switchScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+}
+function showGiveUpModal() { openModal('giveup-modal'); }
+
+function openResetModal1() { openModal('reset-modal-1'); }
+function openResetModal2() { 
+    closeModal('reset-modal-1');
+    openModal('reset-modal-2'); 
+}
+function executeResetData() {
+    seenElements = [];
+    clearedElements = [];
+    localStorage.removeItem('fusionSeenElements');
+    localStorage.removeItem('fusionClearedElements');
+    closeModal('reset-modal-2');
+    renderPeriodicTable();
+}
+
+function openCrownModal() {
+    renderCrowns();
+    openModal('crown-modal');
+}
+
+function toggleGuide() {
+    showGuide = !showGuide;
+    const btn = document.getElementById('guide-toggle-btn');
+    if (btn) {
+        btn.innerText = showGuide ? "ガイド: ON" : "ガイド: OFF";
+        btn.style.opacity = showGuide ? "1.0" : "0.5";
+    }
+}
+
+function returnToTitle() {
+    cancelAnimationFrame(animationId);
+    closeModal('giveup-modal');
+    closeModal('result-modal');
+    closeModal('crown-modal');
+    closeModal('rule-modal');
+    switchScreen('title-screen');
+}
+
+function renderPeriodicTable() {
+    const grid = document.getElementById('pt-grid');
+    grid.innerHTML = '';
+
+    const remaining = 118 - clearedElements.length;
+    document.getElementById('pt-stats-text').innerText = `パーフェクトまで残り: ${remaining} / 118`;
+
+    for(let r=1; r<=10; r++) {
+        for(let c=1; c<=18; c++) {
+            let dummy = document.createElement('div');
+            dummy.style.gridRow = r; dummy.style.gridColumn = c;
+            grid.appendChild(dummy);
+        }
+    }
+
+    for(let i = 1; i <= 118; i++) {
+        const coords = getPTCoords(i);
+        const cell = document.createElement('div');
+        cell.className = 'pt-cell';
+        cell.style.gridRow = coords.r;
+        cell.style.gridColumn = coords.c;
+
+        if (clearedElements.includes(i)) {
+            cell.classList.add('cleared');
+            cell.innerHTML = `<span class="pt-z">${i}</span><span class="pt-sym">${ELEMENTS[i]}</span>`;
+        } else if (seenElements.includes(i)) {
+            cell.classList.add('seen');
+            cell.innerHTML = `<span class="pt-z">${i}</span><span class="pt-sym">${ELEMENTS[i]}</span>`;
+        } else {
+            cell.innerHTML = `<span class="pt-z">${i}</span><span class="pt-sym">?</span>`;
+        }
+        grid.appendChild(cell);
+    }
+}
+
+function renderCrowns() {
+    const crownGrid = document.getElementById('crown-grid');
+    crownGrid.innerHTML = '';
+
+    const crownList = [
+        { id: 'alkali', name: 'アルカリ金属', targets: GROUPS.alkali, icon: '👑' },
+        { id: 'alkalineEarth', name: 'アルカリ土類', targets: GROUPS.alkalineEarth, icon: '👑' },
+        { id: 'halogen', name: 'ハロゲン', targets: GROUPS.halogen, icon: '👑' },
+        { id: 'nobleGas', name: '希ガス', targets: GROUPS.nobleGas, icon: '👑' },
+        { id: 'preciousMetal', name: '貴金属', targets: GROUPS.preciousMetal, icon: '👑' },
+        { id: 'mainGroup', name: '典型元素', targets: GROUPS.mainGroup, icon: '👑' },
+        { id: 'transition', name: '遷移元素', targets: GROUPS.transition, icon: '👑' },
+        { id: 'perfect', name: 'コンプリート', targets: Array.from({length: 118}, (_, i) => i + 1), icon: '💎' }
+    ];
+
+    crownList.forEach(c => {
+        const doneCount = c.targets.filter(z => clearedElements.includes(z)).length;
+        const totalCount = c.targets.length;
+        const isUnlocked = (doneCount === totalCount);
+
+        const card = document.createElement('div');
+        card.className = `crown-card-compact ${isUnlocked ? 'unlocked' : ''}`;
+        card.innerHTML = `
+            <div class="crown-icon-compact">${c.icon}</div>
+            <div class="crown-info-compact">
+                <div class="crown-name-compact">${c.name}</div>
+                <div class="crown-progress-compact">${isUnlocked ? 'CLEAR!' : `${doneCount}/${totalCount}`}</div>
+            </div>
+        `;
+        crownGrid.appendChild(card);
+    });
+}
+
+// --- エフェクト／パーティクル ---
+class Particle {
+    constructor(x, y, color, type = 'normal', maxRadius = 180) {
+        this.x = x; this.y = y;
+        this.type = type;
+        
+        if (type === 'ring') {
+            this.radius = 5;
+            this.maxRadius = maxRadius; 
+            this.life = 1.0;
+            this.color = color;
+        } else {
+            let angle = Math.random() * Math.PI * 2;
+            let speed = Math.random() * (maxRadius / 15) + 3; 
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.life = 1.0;
+            this.color = color;
+            this.size = Math.random() * 5 + 3;
+        }
+    }
+    update() {
+        if (this.type === 'ring') {
+            this.radius += 8;
+            this.life = Math.max(0, 1.0 - (this.radius / this.maxRadius));
+        } else {
+            this.x += this.vx; this.y += this.vy;
+            this.vx *= 0.94; this.vy *= 0.94;
+            this.life -= 0.025;
+        }
+    }
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life);
+        if (this.type === 'ring') {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+}
+
+function createExplosion(x, y, color, radiusScale = 180) {
+    for(let i = 0; i < 35; i++) {
+        particles.push(new Particle(x, y, color, 'normal', radiusScale));
+    }
+}
+
+function getNeutronRadius(z) {
+    return 80 + (z * 1.8);
+}
+
+function createNeutronWave(x, y, z) {
+    let radiusScale = getNeutronRadius(z);
+    particles.push(new Particle(x, y, '#a4be75', 'ring', radiusScale));
+    for(let i = 0; i < 24; i++) {
+        let angle = (Math.PI * 2 / 24) * i;
+        let p = new Particle(x, y, '#ffffff', 'normal', radiusScale);
+        let speed = (radiusScale / 20);
+        p.vx = Math.cos(angle) * speed;
+        p.vy = Math.sin(angle) * speed;
+        particles.push(p);
+    }
+}
+
+// --- Ball クラス ---
+class Ball {
+    constructor(x, y, z, isCue = false) {
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = 0;
+        this.z = z;
+        this.isCue = isCue;
+        this.timer = useHalfLife ? getHalfLife(this.z) : null;
+        this.markedForDeletion = false;
+        
+        this.spinX = 0;
+        this.spinY = 0;
+        this.spinEnergy = 0;
+        this.spinMax = 0;
+
+        this.updateProperties();
+        markSeen(this.z);
+    }
+    
+    updateProperties() {
+        this.mass = Math.max(1, this.z);
+        this.radius = 20 + Math.sqrt(this.z) * 2.0;
+        this.friction = Math.max(0.960, BASE_FRICTION - (this.mass * 0.00025));
+    }
+
+    draw(ctx) {
+        let hue = (this.z * 23) % 360;
+        let baseColor = this.z === 26 ? '#7a6a5a' : `hsl(${hue}, 45%, 40%)`;
+        
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = baseColor;
+        ctx.fill();
+
+        if (this.isCue) {
+            let pulse = (Math.sin(Date.now() / 200) + 1) / 2;
+            ctx.save();
+            
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 5 + pulse * 3, 0, Math.PI * 2);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#d4af37';
+            ctx.shadowColor = '#d4af37';
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+            
+            ctx.restore();
+        } 
+        else if (useHalfLife && this.timer !== null && this.timer <= 3) {
+            let blinkAlpha = (Math.sin(Date.now() / 100) + 1) / 2;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(192, 57, 43, ${0.3 + blinkAlpha * 0.5})`;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.stroke();
+
+        ctx.fillStyle = '#f0ead6';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        let symbol = ELEMENTS[this.z] || '?';
+
+        if (hideZ) {
+            ctx.font = `bold ${this.radius}px 'Clear Sans', sans-serif`;
+            ctx.fillText(symbol, this.x, this.y);
+        } else {
+            ctx.font = `bold ${this.radius * 0.7}px 'Clear Sans', sans-serif`;
+            ctx.fillText(symbol, this.x, this.y - 2);
+            ctx.font = `bold ${this.radius * 0.4}px 'Clear Sans', sans-serif`;
+            ctx.fillText(this.z, this.x, this.y + this.radius * 0.55);
+        }
+
+        if (useHalfLife && this.timer !== null) {
+            let isWarning = (this.timer <= 3);
+            ctx.save();
+            
+            // ★ 半減期のフォントサイズ拡大 & 位置調整
+            ctx.font = `bold ${Math.max(22, this.radius * 0.95)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let timerText = "⏳" + this.timer;
+            let badgeX = this.x + this.radius * 0.65;
+            let badgeY = this.y - this.radius * 0.65;
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.lineWidth = 4;
+            ctx.strokeText(timerText, badgeX, badgeY);
+
+            ctx.fillStyle = isWarning ? '#e74c3c' : '#ffffff';
+            ctx.fillText(timerText, badgeX, badgeY);
+            ctx.restore();
+        }
+    }
+}
+
+// 【改修】重なり絶対防止処理（Relaxation）
+function resolveOverlaps() {
+    let maxIterations = 50;
+    let overlapFound = true;
+    let iter = 0;
+    while(overlapFound && iter < maxIterations) {
+        overlapFound = false;
+        
+        for(let i=0; i<balls.length; i++) {
+            for(let j=i+1; j<balls.length; j++) {
+                let b1 = balls[i];
+                let b2 = balls[j];
+                if(b1.markedForDeletion || b2.markedForDeletion) continue;
+                
+                let dx = b2.x - b1.x;
+                let dy = b2.y - b1.y;
+                let dist = Math.hypot(dx, dy);
+                let minDist = b1.radius + b2.radius + 1.0; 
+                
+                if(dist < minDist) {
+                    overlapFound = true;
+                    let overlap = minDist - dist;
+                    let nx = dist === 0 ? 1 : dx / dist;
+                    let ny = dist === 0 ? 0 : dy / dist;
+                    let m1r = b2.mass / (b1.mass + b2.mass);
+                    let m2r = b1.mass / (b1.mass + b2.mass);
+                    
+                    b1.x -= nx * overlap * m1r;
+                    b1.y -= ny * overlap * m1r;
+                    b2.x += nx * overlap * m2r;
+                    b2.y += ny * overlap * m2r;
+                }
+            }
+        }
+        
+        for(let i=0; i<balls.length; i++) {
+            let b = balls[i];
+            if(b.markedForDeletion) continue;
+            if(b.x - b.radius < 0) { b.x = b.radius; overlapFound = true; }
+            if(b.x + b.radius > cw) { b.x = cw - b.radius; overlapFound = true; }
+            if(b.y - b.radius < 0) { b.y = b.radius; overlapFound = true; }
+            if(b.y + b.radius > ch) { b.y = ch - b.radius; overlapFound = true; }
+        }
+        iter++;
+    }
+}
+
+function resize() {
+    if (window.innerWidth > window.innerHeight) {
+        cw = 2000; ch = 1000;
+    } else {
+        cw = 1000; ch = 2000;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); 
+    ctx.scale(dpr, dpr);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function resetSpinUI() {
+    setSpinX = 0; setSpinY = 0;
+    isSpinDragging = false;
+    
+    const marker = document.getElementById('spin-marker');
+    if (marker) {
+        marker.style.left = '50%';
+        marker.style.top = '50%';
+    }
+    
+    const spinUI = document.getElementById('spin-ui');
+    if (spinUI) {
+        spinUI.style.opacity = '1';
+        spinUI.style.pointerEvents = 'auto';
+    }
+}
+
+function startGame(mode) {
+    currentMode = mode;
+    requireSpeed = (mode >= 1);
+    useHalfLife = (mode >= 2);
+    hideZ = (mode === 3);
+
+    switchScreen('game-screen');
+    resize();
+    nextStage(true);
+    cancelAnimationFrame(animationId);
+    update();
+}
+
+function nextStage(isInitial = false) {
+    closeModal('result-modal');
+    
+    targetZ = Math.floor(Math.random() * 116) + 3;
+    turnsLeft = hideZ ? targetZ + 10 : targetZ + 5; 
+    
+    let targetText = hideZ ? ELEMENTS[targetZ] : `${ELEMENTS[targetZ]} (${targetZ})`;
+    document.getElementById('ui-target-top').innerText = targetText;
+    document.getElementById('ui-target-side').innerText = targetText;
+    
+    balls = [];
+    particles = [];
+    spawnTurnCounter = 0;
+    
+    let initialCount = Math.floor(Math.random() * 3) + 3;
+    for(let i = 0; i < initialCount; i++) {
+        let z = getRandomElementZ(targetZ);
+        let radius = 20 + Math.sqrt(z) * 2.0;
+        let pos = getValidSpawnPosition(radius);
+        balls.push(new Ball(pos.x, pos.y, z));
+    }
+    
+    nextCueZ = getRandomElementZ(targetZ, true);
+    spawnCueBall();
+    
+    // 生成直後の重なりを解消
+    resolveOverlaps();
+    
+    resetSpinUI();
+    gameState = 'IDLE';
+    updateUI();
+}
+
+function spawnCueBall() {
+    let currentZ = nextCueZ;
+    let radius = 20 + Math.sqrt(currentZ) * 2.0;
+    let pos = getValidSpawnPosition(radius);
+    balls.push(new Ball(pos.x, pos.y, currentZ, true));
+    
+    let curText = ELEMENTS[currentZ] || '?';
+    document.getElementById('ui-current-val').innerText = curText;
+
+    nextCueZ = getRandomElementZ(targetZ, true);
+    let nextText = hideZ ? ELEMENTS[nextCueZ] : `${ELEMENTS[nextCueZ]} (${nextCueZ})`;
+    document.getElementById('ui-next-val').innerText = nextText;
+}
+
+// --- メイン物理ループ ---
+function update() {
+    animationId = requestAnimationFrame(update);
+    ctx.clearRect(0, 0, cw, ch);
+    
+    ctx.fillStyle = '#152219';
+    ctx.fillRect(0, 0, cw, ch);
+
+    if(gameState === 'MOVING') {
+        let maxV = 0;
+        balls.forEach(b => {
+            let speed = Math.hypot(b.vx, b.vy);
+            if(speed > maxV) maxV = speed;
+        });
+
+        const SUB_STEPS = Math.max(4, Math.ceil(maxV / 4));
+
+        let timeElapsed = Date.now() - shootTime;
+        let applySpin = (timeElapsed <= 5000);
+        let cue = balls.find(b => b.isCue);
+
+        if (applySpin && cue && (cue.spinX !== 0 || cue.spinY !== 0)) {
+            cue.spinMax = Math.max(0, cue.spinMax - 0.0033);
+            cue.spinEnergy = Math.max(0, cue.spinEnergy - 0.016);
+        }
+
+        for (let step = 0; step < SUB_STEPS; step++) {
+            let isMoving = false;
+            
+            if (applySpin && cue && cue.spinEnergy > 0) {
+                let speed = Math.hypot(cue.vx, cue.vy);
+                if (speed > 0.2) {
+                    let dirX = cue.vx / speed;
+                    let dirY = cue.vy / speed;
+                    let rightX = -dirY;
+                    let rightY = dirX;
+                    
+                    let spinForce = 6.0 * cue.spinEnergy;
+                    let forceForward = -cue.spinY * spinForce * 0.5;
+                    let forceSide = cue.spinX * spinForce * 2.2;
+                    
+                    cue.vx += (dirX * forceForward + rightX * forceSide) / SUB_STEPS;
+                    cue.vy += (dirY * forceForward + rightY * forceSide) / SUB_STEPS;
+                }
+            }
+
+            balls.forEach(b => {
+                b.x += b.vx / SUB_STEPS; 
+                b.y += b.vy / SUB_STEPS;
+            });
+            
+            for(let i=0; i<balls.length; i++) {
+                for(let j=i+1; j<balls.length; j++) {
+                    if(!balls[i].markedForDeletion && !balls[j].markedForDeletion) {
+                        checkCollision(balls[i], balls[j]);
+                    }
+                }
+            }
+            
+            balls.forEach(b => {
+                if (b.markedForDeletion) return;
+                
+                let hit = false;
+                if(b.x - b.radius < 0) { b.x = b.radius; b.vx = Math.abs(b.vx) * RESTITUTION; hit = true; }
+                if(b.x + b.radius > cw) { b.x = cw - b.radius; b.vx = -Math.abs(b.vx) * RESTITUTION; hit = true; }
+                if(b.y - b.radius < 0) { b.y = b.radius; b.vy = Math.abs(b.vy) * RESTITUTION; hit = true; }
+                if(b.y + b.radius > ch) { b.y = ch - b.radius; b.vy = -Math.abs(b.vy) * RESTITUTION; hit = true; }
+                
+                if(hit && Math.hypot(b.vx, b.vy) < 0.1) { b.vx = 0; b.vy = 0; }
+
+                if (step === SUB_STEPS - 1) {
+                    b.vx *= b.friction; 
+                    b.vy *= b.friction;
+                }
+                
+                let speed = Math.hypot(b.vx, b.vy);
+                if(speed > STOP_THRESHOLD) {
+                    isMoving = true;
+                } else if (step === SUB_STEPS - 1) {
+                    b.vx = 0; b.vy = 0;
+                }
+            });
+            
+            balls = balls.filter(b => !b.markedForDeletion);
+            
+            if(!isMoving && step === SUB_STEPS - 1) {
+                endTurn();
+                break;
+            }
+        }
+    }
+    
+    balls.forEach(b => b.draw(ctx));
+
+    particles.forEach(p => p.update());
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => p.draw(ctx));
+    
+    if(gameState === 'IDLE' && isDragging && !isCancelDrag) {
+        let cue = balls.find(b => b.isCue);
+        if(cue) {
+            let dx = dragStartX - dragCurrentX;
+            let dy = dragStartY - dragCurrentY;
+            let pullDist = Math.hypot(dx, dy);
+            const MAX_PULL = Math.min(cw, ch) * 0.35;
+            if (pullDist > MAX_PULL) {
+                dx = (dx / pullDist) * MAX_PULL;
+                dy = (dy / pullDist) * MAX_PULL;
+            }
+            drawSpinArrow(ctx, cue.x, cue.y, dx, dy);
+        }
+    }
+}
+
+// 【改修】シミュレーション用衝突処理（静止ボールは確実にスルーする）
+function checkCollisionSim(b1, b2, cueBallRef) {
+    let dx = b2.x - b1.x; let dy = b2.y - b1.y;
+    let dist2 = dx*dx + dy*dy;
+    let minDist = b1.radius + b2.radius;
+    
+    if(dist2 < minDist*minDist) {
+        let dist = Math.sqrt(dist2);
+        let nx = dist === 0 ? 1 : dx / dist; 
+        let ny = dist === 0 ? 0 : dy / dist;
+
+        let v1 = Math.hypot(b1.vx, b1.vy);
+        let v2 = Math.hypot(b2.vx, b2.vy);
+        let overlap = minDist - dist;
+        let m1r = b2.mass / (b1.mass + b2.mass);
+        let m2r = b1.mass / (b1.mass + b2.mass);
+
+        if (v1 < STOP_THRESHOLD && v2 < STOP_THRESHOLD) {
+            b1.x -= nx * overlap * m1r; b1.y -= ny * overlap * m1r;
+            b2.x += nx * overlap * m2r; b2.y += ny * overlap * m2r;
+            b1.vx = 0; b1.vy = 0; b2.vx = 0; b2.vy = 0;
+            return;
+        }
+
+        b1.x -= nx * overlap * m1r; b1.y -= ny * overlap * m1r;
+        b2.x += nx * overlap * m2r; b2.y += ny * overlap * m2r;
+
+        let rvx = b1.vx - b2.vx; let rvy = b1.vy - b2.vy;
+        let relVel = rvx * nx + rvy * ny;
+
+        if (relVel > 0.05) { 
+            if (b1.isCue || b2.isCue) cueBallRef.hasReflected = true;
+            
+            let absRelVel = Math.hypot(rvx, rvy); 
+            let speedRequirement = 0;
+            if (requireSpeed) {
+                let avgMass = (b1.mass + b2.mass) / 2;
+                speedRequirement = Math.max(0.5, 3.5 - (avgMass * 0.02)); 
+            }
+
+            if ((!requireSpeed) || (absRelVel >= speedRequirement)) {
+                let totalZ = b1.z + b2.z;
+                if (totalZ > 118) {
+                    b1.markedForDeletion = true; b2.markedForDeletion = true; return;
+                }
+                
+                let oldMass1 = b1.mass;
+                let oldMass2 = b2.mass;
+                let newVx = (b1.vx * oldMass1 + b2.vx * oldMass2) / (oldMass1 + oldMass2);
+                let newVy = (b1.vy * oldMass1 + b2.vy * oldMass2) / (oldMass1 + oldMass2);
+                
+                b1.z = totalZ;
+                b1.mass = Math.max(1, b1.z);
+                b1.radius = 20 + Math.sqrt(b1.z) * 2.0;
+                b1.vx = newVx;
+                b1.vy = newVy;
+                b1.isCue = b1.isCue || b2.isCue;
+                b2.markedForDeletion = true;
+                b1.vx *= 1.15; b1.vy *= 1.15;
+                return;
+            }
+            
+            let j = (1 + RESTITUTION) * relVel / (1/b1.mass + 1/b2.mass);
+            b1.vx -= j * nx / b1.mass; b1.vy -= j * ny / b1.mass;
+            b2.vx += j * nx / b2.mass; b2.vy += j * ny / b2.mass;
+        }
+    }
+}
+
+function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
+    if (!showGuide) return;
+
+    let pullDist = Math.hypot(pullDx, pullDy);
+    if (pullDist < 8) return;
+
+    const MAX_PULL = Math.min(cw, ch) * 0.35;
+    let ratio = Math.min(1.0, pullDist / MAX_PULL);
+    let initialSpeed = 1.5 + ratio * (MAX_SPEED - 1.5);
+    let angle = Math.atan2(pullDy, pullDx);
+
+    let actualCue = balls.find(b => b.isCue);
+    if (!actualCue) return;
+
+    let simBalls = balls.map(b => ({
+        x: b.x, y: b.y, vx: 0, vy: 0, z: b.z, 
+        radius: b.radius, mass: b.mass, friction: b.friction,
+        isCue: b.isCue, markedForDeletion: b.markedForDeletion
+    }));
+
+    let simCue = simBalls.find(b => b.isCue);
+    simCue.vx = Math.cos(angle) * initialSpeed;
+    simCue.vy = Math.sin(angle) * initialSpeed;
+
+    let spinEnergy = 1.0;
+    let spinMax = 1.0;
+    let sX = setSpinX;
+    let sY = setSpinY;
+
+    let points = [{ x: simCue.x, y: simCue.y }];
+    let afterReflectPoints = [];
+    let cueBallRef = { hasReflected: false };
+
+    const SUB_STEPS = 4;
+    const MAX_FRAMES = 100;
+    let stopSim = false;
+
+    for (let f = 0; f < MAX_FRAMES && !stopSim; f++) {
+        spinMax = Math.max(0, spinMax - 0.0033);
+        spinEnergy = Math.max(0, spinEnergy - 0.016);
+
+        for (let step = 0; step < SUB_STEPS; step++) {
+            
+            if (simCue && !simCue.markedForDeletion && spinEnergy > 0 && (sX !== 0 || sY !== 0)) {
+                let speed = Math.hypot(simCue.vx, simCue.vy);
+                if (speed > 0.2) {
+                    let dirX = simCue.vx / speed; let dirY = simCue.vy / speed;
+                    let rightX = -dirY; let rightY = dirX;
+                    let spinForce = 6.0 * spinEnergy;
+                    let forceForward = -sY * spinForce * 0.5;
+                    let forceSide = sX * spinForce * 2.2;
+                    simCue.vx += (dirX * forceForward + rightX * forceSide) / SUB_STEPS;
+                    simCue.vy += (dirY * forceForward + rightY * forceSide) / SUB_STEPS;
+                }
+            }
+
+            simBalls.forEach(b => { b.x += b.vx / SUB_STEPS; b.y += b.vy / SUB_STEPS; });
+
+            for(let i=0; i<simBalls.length; i++) {
+                for(let j=i+1; j<simBalls.length; j++) {
+                    if(!simBalls[i].markedForDeletion && !simBalls[j].markedForDeletion) {
+                        checkCollisionSim(simBalls[i], simBalls[j], cueBallRef);
+                    }
+                }
+            }
+            
+            simBalls.forEach(b => {
+                if (b.markedForDeletion) return;
+                let hit = false;
+                if(b.x - b.radius < 0) { b.x = b.radius; b.vx = Math.abs(b.vx) * RESTITUTION; hit = true; }
+                if(b.x + b.radius > cw) { b.x = cw - b.radius; b.vx = -Math.abs(b.vx) * RESTITUTION; hit = true; }
+                if(b.y - b.radius < 0) { b.y = b.radius; b.vy = Math.abs(b.vy) * RESTITUTION; hit = true; }
+                if(b.y + b.radius > ch) { b.y = ch - b.radius; b.vy = -Math.abs(b.vy) * RESTITUTION; hit = true; }
+                if(hit && Math.hypot(b.vx, b.vy) < 0.1) { b.vx = 0; b.vy = 0; }
+                
+                if (hit && b.isCue) cueBallRef.hasReflected = true;
+                
+                if (step === SUB_STEPS - 1) {
+                    b.vx *= b.friction; 
+                    b.vy *= b.friction;
+                }
+            });
+
+            simCue = simBalls.find(b => b.isCue && !b.markedForDeletion);
+            if (!simCue || Math.hypot(simCue.vx, simCue.vy) < STOP_THRESHOLD) {
+                stopSim = true;
+                break;
+            }
+
+            if (step === SUB_STEPS - 1) {
+                if (!cueBallRef.hasReflected) {
+                    points.push({ x: simCue.x, y: simCue.y });
+                } else {
+                    afterReflectPoints.push({ x: simCue.x, y: simCue.y });
+                }
+            }
+        }
+    }
+
+    ctx.save();
+    
+    if (points.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.95)';
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        if (!cueBallRef.hasReflected) {
+            let lastPt = points[points.length - 1];
+            let prevPt = points[points.length - 2];
+            drawArrowHead(ctx, prevPt.x, prevPt.y, lastPt.x, lastPt.y, 'rgba(212, 175, 55, 0.95)', 18);
+        }
+    }
+
+    if (cueBallRef.hasReflected && points.length > 0) {
+        let reflectPoint = points[points.length - 1];
+        ctx.beginPath();
+        ctx.arc(reflectPoint.x, reflectPoint.y, actualCue.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(reflectPoint.x, reflectPoint.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fill();
+
+        if (afterReflectPoints.length > 0) {
+            ctx.beginPath();
+            ctx.setLineDash([8, 6]);
+            ctx.moveTo(reflectPoint.x, reflectPoint.y);
+            for (let p of afterReflectPoints) { ctx.lineTo(p.x, p.y); }
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            let lastPt = afterReflectPoints[afterReflectPoints.length - 1];
+            let prevPt = afterReflectPoints.length > 1 ? afterReflectPoints[afterReflectPoints.length - 2] : reflectPoint;
+            drawArrowHead(ctx, prevPt.x, prevPt.y, lastPt.x, lastPt.y, 'rgba(255, 215, 0, 0.95)', 16);
+        }
+    }
+
+    ctx.restore();
+}
+
+function drawArrowHead(ctx, fromX, fromY, toX, toY, color, size = 16) {
+    let angle = Math.atan2(toY - fromY, toX - fromX);
+    ctx.save();
+    ctx.translate(toX, toY);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, -size * 0.55);
+    ctx.lineTo(-size * 0.7, 0);
+    ctx.lineTo(-size, size * 0.55);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+}
+
+// === PRESERVED GAME SYSTEM: 衝突・融合・分割処理 ===
+function checkCollision(b1, b2) {
+    let dx = b2.x - b1.x; let dy = b2.y - b1.y;
+    let dist2 = dx*dx + dy*dy;
+    let minDist = b1.radius + b2.radius;
+    
+    if(dist2 < minDist*minDist) {
+        let dist = Math.sqrt(dist2);
+        let nx = dist === 0 ? 1 : dx / dist; 
+        let ny = dist === 0 ? 0 : dy / dist;
+        
+        let v1 = Math.hypot(b1.vx, b1.vy);
+        let v2 = Math.hypot(b2.vx, b2.vy);
+        let overlap = minDist - dist;
+        let m1r = b2.mass / (b1.mass + b2.mass);
+        let m2r = b1.mass / (b1.mass + b2.mass);
+
+        if (v1 < STOP_THRESHOLD && v2 < STOP_THRESHOLD) {
+            b1.x -= nx * overlap * m1r; b1.y -= ny * overlap * m1r;
+            b2.x += nx * overlap * m2r; b2.y += ny * overlap * m2r;
+            b1.vx = 0; b1.vy = 0; b2.vx = 0; b2.vy = 0;
+            return;
+        }
+
+        b1.x -= nx * overlap * m1r; b1.y -= ny * overlap * m1r;
+        b2.x += nx * overlap * m2r; b2.y += ny * overlap * m2r;
+
+        let rvx = b1.vx - b2.vx; let rvy = b1.vy - b2.vy;
+        let relVel = rvx * nx + rvy * ny;
+
+        if (relVel > 0.05) { 
+            let absRelVel = Math.hypot(rvx, rvy); 
+            let totalZ = b1.z + b2.z;
+            
+            let speedRequirement = 0;
+            if (requireSpeed) {
+                let avgMass = (b1.mass + b2.mass) / 2;
+                speedRequirement = Math.max(0.5, 3.5 - (avgMass * 0.02)); 
+            }
+
+            let meetsSpeedCondition = (!requireSpeed) || (absRelVel >= speedRequirement);
+
+            if(meetsSpeedCondition) {
+                if (totalZ > 118) {
+                    b1.markedForDeletion = true;
+                    b2.markedForDeletion = true;
+                    
+                    let centerX = (b1.x + b2.x) / 2;
+                    let centerY = (b1.y + b2.y) / 2;
+                    createExplosion(centerX, centerY, '#c0392b', 220);
+                    createExplosion(centerX, centerY, '#d4af37', 220);
+
+                    let minX = Math.max(1, totalZ - 118);
+                    let maxX = Math.min(118, totalZ - 1);
+                    let z1 = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
+                    let z2 = totalZ - z1;
+
+                    let r1 = 20 + Math.sqrt(z1) * 2.0;
+                    let r2 = 20 + Math.sqrt(z2) * 2.0;
+                    let sepDist = r1 + r2 + 10;
+
+                    let child1 = new Ball(centerX - nx * (sepDist/2), centerY - ny * (sepDist/2), z1);
+                    let child2 = new Ball(centerX + nx * (sepDist/2), centerY + ny * (sepDist/2), z2);
+                    
+                    let scatterSpeed = 8.0; 
+                    child1.vx = -nx * scatterSpeed; child1.vy = -ny * scatterSpeed;
+                    child2.vx = nx * scatterSpeed; child2.vy = ny * scatterSpeed;
+                    
+                    balls.push(child1, child2);
+                    
+                    // 【改修】分裂直後の重なりを静的に解決（速度は維持して弾け飛ぶ）
+                    resolveOverlaps();
+                    return;
+                }
+
+                let oldMass1 = b1.mass;
+                let oldMass2 = b2.mass;
+                let newVx = (b1.vx * oldMass1 + b2.vx * oldMass2) / (oldMass1 + oldMass2);
+                let newVy = (b1.vy * oldMass1 + b2.vy * oldMass2) / (oldMass1 + oldMass2);
+
+                b1.z = totalZ;
+                b1.updateProperties();
+                b1.vx = newVx;
+                b1.vy = newVy;
+                
+                b1.timer = useHalfLife ? getHalfLife(b1.z) : null;
+                b1.isCue = b1.isCue || b2.isCue;
+                
+                b1.spinEnergy = Math.max(b1.spinEnergy || 0, b2.spinEnergy || 0);
+                b1.spinMax = Math.max(b1.spinMax || 0, b2.spinMax || 0);
+                
+                b2.markedForDeletion = true;
+                b1.vx *= 1.15; b1.vy *= 1.15;
+                
+                markSeen(b1.z);
+                return;
+            }
+            
+            let j = (1 + RESTITUTION) * relVel / (1/b1.mass + 1/b2.mass);
+            b1.vx -= j * nx / b1.mass; b1.vy -= j * ny / b1.mass;
+            b2.vx += j * nx / b2.mass; b2.vy += j * ny / b2.mass;
+        }
+    }
+}
+
+/* === PRESERVED GAME SYSTEM: ターン終了処理 === */
+function endTurn() {
+    turnsLeft--;
+    spawnTurnCounter++;
+    
+    if(balls.some(b => b.z === targetZ)) {
+        markCleared(targetZ);
+        showResult(true);
+        return;
+    }
+    
+    let newBalls = [];
+    if(useHalfLife) {
+        balls.forEach(b => {
+            b.isCue = false;
+            b.spinEnergy = 0; b.spinMax = 0;
+            if(b.timer !== null) {
+                b.timer--;
+                if(b.timer <= 0) {
+                    b.markedForDeletion = true;
+                    let nRadius = getNeutronRadius(b.z);
+                    createExplosion(b.x, b.y, '#c0392b', nRadius);
+
+                    let z1 = Math.max(1, Math.floor(b.z / 2));
+                    let z2 = Math.max(1, b.z - z1);
+                    
+                    let cr1 = 20 + Math.sqrt(z1) * 2.0;
+                    let cr2 = 20 + Math.sqrt(z2) * 2.0;
+                    let spawnOffset = cr1 + cr2 + 6;
+                    
+                    let randAngle = Math.random() * Math.PI * 2;
+                    let child1 = new Ball(b.x - Math.cos(randAngle) * (spawnOffset / 2), b.y - Math.sin(randAngle) * (spawnOffset / 2), z1);
+                    let child2 = new Ball(b.x + Math.cos(randAngle) * (spawnOffset / 2), b.y + Math.sin(randAngle) * (spawnOffset / 2), z2);
+                    
+                    let speed = 8.0; 
+                    child1.vx = -Math.cos(randAngle) * speed; child1.vy = -Math.sin(randAngle) * speed;
+                    child2.vx = Math.cos(randAngle) * speed; child2.vy = Math.sin(randAngle) * speed;
+                    
+                    newBalls.push(child1, child2);
+                    
+                    createNeutronWave(b.x, b.y, b.z);
+
+                    balls.forEach(target => {
+                        if(target !== b && !target.markedForDeletion) {
+                            let dist = Math.hypot(target.x - b.x, target.y - b.y);
+                            if(dist < nRadius && target.z < 118) {
+                                target.z++;
+                                target.updateProperties();
+                                target.timer = getHalfLife(target.z);
+                                markSeen(target.z);
+                                createExplosion(target.x, target.y, '#889e5c', 100);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    } else {
+        balls.forEach(b => {
+            b.isCue = false;
+            b.spinEnergy = 0; b.spinMax = 0;
+        });
+    }
+    
+    balls = balls.filter(b => !b.markedForDeletion).concat(newBalls);
+
+    if (spawnTurnCounter % 2 === 0) {
+        let zNew = getRandomElementZ(targetZ);
+        let newRadius = 20 + Math.sqrt(zNew) * 2.0;
+        let newPos = getValidSpawnPosition(newRadius);
+        balls.push(new Ball(newPos.x, newPos.y, zNew));
+    }
+    
+    spawnCueBall();
+
+    let fieldBalls = balls.filter(b => !b.isCue && !b.markedForDeletion);
+    if (fieldBalls.length >= 40) {
+        showResult(false, "overflow");
+        return;
+    }
+
+    if (turnsLeft <= 0) {
+        showResult(false, "turns");
+        return;
+    }
+
+    // 【改修】ターン終了時に全原子の運動量を確実にゼロにし、重なりを100%解決する
+    balls.forEach(b => {
+        b.vx = 0;
+        b.vy = 0;
+    });
+    resolveOverlaps();
+
+    resetSpinUI();
+    isDragging = false;
+    isCancelDrag = false;
+
+    gameState = 'IDLE';
+    updateUI();
+}
+
+function updateUI() {
+    let topTurns = document.getElementById('ui-turns-top');
+    let sideTurns = document.getElementById('ui-turns-side');
+    topTurns.innerText = turnsLeft;
+    sideTurns.innerText = turnsLeft;
+    
+    if(turnsLeft <= 3) {
+        topTurns.classList.add('danger');
+        sideTurns.classList.add('danger');
+    } else {
+        topTurns.classList.remove('danger');
+        sideTurns.classList.remove('danger');
+    }
+    
+    let spinUI = document.getElementById('spin-ui');
+    
+    if (gameState === 'IDLE') {
+        document.getElementById('ui-hint').innerHTML = '手球を引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(手玉内に戻すとキャンセル可能)</span>';
+        if (spinUI) {
+            spinUI.style.opacity = '1';
+            spinUI.style.pointerEvents = 'auto';
+        }
+    } else {
+        document.getElementById('ui-hint').innerHTML = '画面タップ連打でスピンを維持！<br><span style="font-size:0.8em; font-weight:normal;">(発射から5秒間有効)</span>';
+        if (spinUI) {
+            spinUI.style.opacity = '0.4';
+            spinUI.style.pointerEvents = 'none';
+        }
+    }
+}
+
+function showResult(isClear, reason = "") {
+    gameState = 'GAMEOVER';
+    const modal = document.getElementById('result-modal');
+    const title = document.getElementById('modal-title');
+    const desc = document.getElementById('modal-desc');
+    
+    if(isClear) {
+        title.innerText = "CLEAR!";
+        title.style.color = "#d4af37";
+        desc.innerText = `見事 ${ELEMENTS[targetZ]} を生成しました！\n周期表・実績に記録されました。`;
+        modal.querySelector('.modal-btn').style.display = 'block';
+    } else {
+        title.innerText = "GAME OVER";
+        title.style.color = "#e74c3c";
+        if (reason === "overflow") {
+            desc.innerText = `盤面に原子が増えすぎました(40個以上)。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
+        } else {
+            desc.innerText = `ターン切れです。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
+        }
+        modal.querySelector('.modal-btn').style.display = 'none'; 
+    }
+    modal.classList.add('active');
+}
+
+// --- スピンUIイベント ---
+const spinUI = document.getElementById('spin-ui');
+
+function handleSpinInput(clientX, clientY) {
+    const rect = spinUI.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    let dx = clientX - centerX;
+    let dy = clientY - centerY;
+    
+    const radius = rect.width / 2;
+    let dist = Math.hypot(dx, dy);
+    
+    if (dist > radius) {
+        dx = (dx / dist) * radius;
+        dy = (dy / dist) * radius;
+    }
+    
+    setSpinX = dx / radius; 
+    setSpinY = dy / radius;
+    
+    const marker = document.getElementById('spin-marker');
+    if (marker) {
+        marker.style.left = `calc(50% + ${dx}px)`;
+        marker.style.top = `calc(50% + ${dy}px)`;
+    }
+}
+
+spinUI.addEventListener('pointerdown', e => {
+    if (gameState !== 'IDLE') return;
+    e.stopPropagation();
+    isSpinDragging = true;
+    spinUI.setPointerCapture(e.pointerId);
+    handleSpinInput(e.clientX, e.clientY);
+});
+
+spinUI.addEventListener('pointermove', e => {
+    if (isSpinDragging) {
+        e.stopPropagation();
+        handleSpinInput(e.clientX, e.clientY);
+    }
+});
+
+const stopSpinDrag = e => {
+    if (isSpinDragging) {
+        e.stopPropagation();
+        isSpinDragging = false;
+        try { spinUI.releasePointerCapture(e.pointerId); } catch(err){}
+    }
+};
+
+spinUI.addEventListener('pointerup', stopSpinDrag);
+spinUI.addEventListener('pointercancel', stopSpinDrag);
+
+// --- ショット操作ポインターイベント ---
+window.addEventListener('pointerdown', e => {
+    if(e.target.tagName === 'BUTTON' || spinUI.contains(e.target) || e.target.tagName === 'INPUT') return;
+    
+    if (gameState === 'IDLE') {
+        if (e.target === canvas) {
+            let cue = balls.find(b => b.isCue);
+            if(cue) {
+                let pos = getLogicalPos(e.clientX, e.clientY);
+                let dist = Math.hypot(pos.x - cue.x, pos.y - cue.y);
+                if(dist < cue.radius * 3.5) {
+                    isDragging = true;
+                    isCancelDrag = false;
+                    dragStartX = cue.x;
+                    dragStartY = cue.y;
+                    dragCurrentX = pos.x; dragCurrentY = pos.y;
+                }
+            }
+        }
+    } else if (gameState === 'MOVING') {
+        if (Date.now() - shootTime <= 5000) {
+            let cue = balls.find(b => b.isCue);
+            if (cue) {
+                cue.spinEnergy = Math.min(cue.spinMax, (cue.spinEnergy || 0) + 0.25);
+            }
+        }
+    }
+});
+
+window.addEventListener('pointermove', e => {
+    if (isDragging) {
+        let pos = getLogicalPos(e.clientX, e.clientY);
+        dragCurrentX = pos.x; dragCurrentY = pos.y;
+
+        let cue = balls.find(b => b.isCue);
+        if (cue) {
+            let distToCue = Math.hypot(pos.x - cue.x, pos.y - cue.y);
+            if (distToCue <= cue.radius) {
+                isCancelDrag = true;
+            } else {
+                isCancelDrag = false;
+            }
+        }
+    }
+});
+
+window.addEventListener('pointerup', e => {
+    if (isDragging) {
+        isDragging = false;
+        
+        if (isCancelDrag) {
+            isCancelDrag = false;
+            return;
+        }
+
+        let cue = balls.find(b => b.isCue);
+        if(cue) {
+            let dx = dragStartX - dragCurrentX;
+            let dy = dragStartY - dragCurrentY;
+            let pullDist = Math.hypot(dx, dy);
+            
+            const MAX_PULL = Math.min(cw, ch) * 0.35; 
+            if (pullDist > MAX_PULL) {
+                dx = (dx / pullDist) * MAX_PULL;
+                dy = (dy / pullDist) * MAX_PULL;
+                pullDist = MAX_PULL;
+            }
+            
+            if(pullDist > 12) {
+                let ratio = pullDist / MAX_PULL;
+                let speed = 1.5 + ratio * (MAX_SPEED - 1.5);
+                let angle = Math.atan2(dy, dx);
+                
+                cue.vx = Math.cos(angle) * speed;
+                cue.vy = Math.sin(angle) * speed;
+                
+                cue.spinX = setSpinX;
+                cue.spinY = setSpinY;
+                cue.spinEnergy = 1.0; 
+                cue.spinMax = 1.0; 
+                
+                shootTime = Date.now(); 
+                gameState = 'MOVING';
+                updateUI();
+            }
+        }
+    }
+});
+</script>
+</body>
+</html>
