@@ -426,7 +426,7 @@
                     </div>
                     <div class="header-box">
                         <div class="header-label">ATOMS</div>
-                        <div class="header-value" id="ui-atoms-top">0/40</div>
+                        <div class="header-value" id="ui-atoms-top">0/50</div>
                     </div>
                     <div class="header-box">
                         <div class="header-label">TURNS</div>
@@ -459,7 +459,7 @@
                         </div>
                         <div class="header-box" style="flex:1;">
                             <div class="header-label">ATOMS</div>
-                            <div class="header-value" id="ui-atoms-side">0/40</div>
+                            <div class="header-value" id="ui-atoms-side">0/50</div>
                         </div>
                     </div>
                 </div>
@@ -526,26 +526,26 @@
             <h2 class="modal-title" style="text-align:center;">📖 ルール・説明書</h2>
             <div class="modal-desc" style="font-size:0.95rem; line-height:1.6; color:var(--text-main); text-align:left;">
                 <p style="margin-top:0;"><strong>🎯 ゲームの目的</strong><br>
-                画面のどこからでも引っ張って離すと手球（CURRENT）を発射！盤面の原子にぶつけて合体させましょう。<br>
-                画面上部の「TARGET」と同じ原子を作ればクリアです！</p>
+                原子をぶつけて合体させ、画面上部の「TARGET」と同じ原子を作りましょう！<br>
+                完成したターゲットには赤い矢印が付きます。</p>
                 
-                <p><strong>🎱 操作方法</strong><br>
-                ・手球を引っぱって離すと発射！<br>
+                <p><strong>🎱 操作と特殊ターン</strong><br>
+                ・通常は手玉を引っぱって離すと発射！<br>
+                ・2ターンに1回、盤上の好きな原子を選んで手玉として打てます。<br>
                 ・画面下の「スピン」をずらすとカーブがかけられます。<br>
                 <span style="font-size:0.85em; opacity:0.8;">※発射後5秒間は、画面をタップするごとにカーブの力が持続します。</span></p>
                 
-                <p><strong>💥 合体（核融合）のルール</strong><br>
-                ・勢いよくぶつけると原子同士が合体し、番号が足し算されます。（例: 1 + 2 = 3）<br>
-                ・合計が「118」を超えると、限界突破して爆発・分裂してしまいます！</p>
+                <p><strong>💥 合体と分裂</strong><br>
+                ・ぶつけると原子の番号が足し算されます。（例: 1 + 2 = 3）<br>
+                ・合計が「118」を超えると、限界突破して分裂し、水素が飛び散ります！</p>
 
                 <p><strong>⏳ 寿命と爆発（ハード以上）</strong><br>
                 ・原子に付いている数字（⏳）はターン寿命です。0になると自爆します。<br>
-                ・爆発の波紋に触れた周りの原子は、番号が「+1」されてしまいます。</p>
+                ・爆発の波紋に触れた周りの原子は、番号が「+1」されるか「寿命が減る」か変化します。</p>
 
                 <p><strong>💀 ゲームオーバー</strong><br>
-                以下のどちらかで失敗となります。<br>
                 ・ターン数（TURNS）が 0 になる<br>
-                ・盤面内に原子が「40個」以上あふれる</p>
+                ・盤面内に原子が「50個」以上あふれる</p>
             </div>
             <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('rule-modal')">閉じる</button>
         </div>
@@ -616,6 +616,7 @@ let cancelBuffer = null;
 let shootBuffer = null;
 let collideBuffer = null;
 let fissionBuffer = null;
+let selectBuffer = null;
 
 // 音声ファイルを非同期で読み込み、バッファに変換する関数
 async function loadAudioBuffer(url) {
@@ -640,6 +641,8 @@ loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836066/%E
     .then(buffer => collideBuffer = buffer);
 loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836070/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF_%E6%A0%B8%E5%88%86%E8%A3%82ver_wtdafa.m4a')
     .then(buffer => fissionBuffer = buffer);
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785849800/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E3%82%B7%E3%83%A7%E3%83%83%E3%83%88_oetdhs.m4a')
+    .then(buffer => selectBuffer = buffer);
 
 // --- BGMの設定 (長尺なので HTML5 Audio のままが推奨されます) ---
 const bgmAudio = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768472/atommic_billiards_loop_fqnn47.m4a');
@@ -759,6 +762,11 @@ function playSeFission() {
     playAudioFull(fissionBuffer);
 }
 
+function playSeSelect() {
+    playBgm();
+    playAudioFull(selectBuffer);
+}
+
 // 初回タップでBGM再生とAudioContextの有効化
 document.body.addEventListener('pointerdown', playBgm, { once: true });
 
@@ -841,9 +849,11 @@ let particles = [];
 let targetZ = 10;
 let nextCueZ = 1; 
 let turnsLeft = 10;
-let gameState = 'IDLE';
+let gameState = 'IDLE'; // IDLE, SELECT_ANY, IDLE_ANY, MOVING, GAMEOVER
 
 let spawnTurnCounter = 0;
+let turnCountTotal = 1;
+let isAnySelectTurn = false;
 let showGuide = true;
 
 let isDragging = false;
@@ -964,6 +974,17 @@ function returnToTitle() {
     closeModal('rule-modal');
     switchScreen('title-screen');
 }
+
+function cancelAnySelection() {
+    if (gameState === 'IDLE_ANY') {
+        balls.forEach(b => b.isCue = false);
+        gameState = 'SELECT_ANY';
+        isDragging = false;
+        isCancelDrag = false;
+        updateUI();
+    }
+}
+window.cancelAnySelection = cancelAnySelection;
 
 function renderPeriodicTable() {
     const grid = document.getElementById('pt-grid');
@@ -1151,6 +1172,27 @@ class Ball {
             ctx.shadowBlur = 15;
             ctx.stroke();
             ctx.restore();
+
+            // 下向き赤矢印
+            ctx.save();
+            let bounce = Math.sin(Date.now() / 200) * 8; 
+            let arrowY = this.y - this.radius - 20 + bounce;
+            ctx.translate(this.x, arrowY);
+            ctx.beginPath();
+            ctx.moveTo(0, 0); // 先端
+            ctx.lineTo(-10, -15);
+            ctx.lineTo(-4, -15);
+            ctx.lineTo(-4, -30);
+            ctx.lineTo(4, -30);
+            ctx.lineTo(4, -15);
+            ctx.lineTo(10, -15);
+            ctx.closePath();
+            ctx.fillStyle = '#e74c3c';
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'white';
+            ctx.stroke();
+            ctx.restore();
         }
 
         if (this.isCue) {
@@ -1330,6 +1372,8 @@ function nextStage(isInitial = false) {
     balls = [];
     particles = [];
     spawnTurnCounter = 0;
+    turnCountTotal = 1;
+    isAnySelectTurn = false;
     
     let initialCount = Math.floor(Math.random() * 3) + 3;
     for(let i = 0; i < initialCount; i++) {
@@ -1462,7 +1506,7 @@ function update() {
     particles = particles.filter(p => p.life > 0);
     particles.forEach(p => p.draw(ctx));
     
-    if(gameState === 'IDLE' && isDragging && !isCancelDrag) {
+    if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging && !isCancelDrag) {
         let cue = balls.find(b => b.isCue);
         if(cue) {
             let dx = dragStartX - dragCurrentX;
@@ -1827,6 +1871,7 @@ function checkCollision(b1, b2) {
 function endTurn() {
     turnsLeft--;
     spawnTurnCounter++;
+    turnCountTotal++;
     
     if(balls.some(b => b.z === targetZ)) {
         markCleared(targetZ);
@@ -1909,10 +1954,17 @@ function endTurn() {
         balls.push(new Ball(newPos.x, newPos.y, zNew));
     }
     
-    spawnCueBall();
+    isAnySelectTurn = (turnCountTotal % 2 === 0);
+
+    if (!isAnySelectTurn) {
+        spawnCueBall();
+        gameState = 'IDLE';
+    } else {
+        gameState = 'SELECT_ANY';
+    }
 
     let fieldBalls = balls.filter(b => !b.isCue && !b.markedForDeletion);
-    if (fieldBalls.length >= 40) {
+    if (fieldBalls.length >= 50) {
         showResult(false, "overflow");
         return;
     }
@@ -1933,7 +1985,6 @@ function endTurn() {
     isDragging = false;
     isCancelDrag = false;
 
-    gameState = 'IDLE';
     updateUI();
 }
 
@@ -1953,23 +2004,31 @@ function updateUI() {
     
     let fieldBalls = balls.filter(b => !b.isCue && !b.markedForDeletion);
     let atomsCount = fieldBalls.length;
-    document.getElementById('ui-atoms-top').innerText = `${atomsCount}/40`;
-    document.getElementById('ui-atoms-side').innerText = `${atomsCount}/40`;
+    document.getElementById('ui-atoms-top').innerText = `${atomsCount}/50`;
+    document.getElementById('ui-atoms-side').innerText = `${atomsCount}/50`;
     
     let spinUI = document.getElementById('spin-ui');
     
     if (gameState === 'IDLE') {
         document.getElementById('ui-hint').innerHTML = '画面のどこからでも引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(タップした指を元の位置に戻すとキャンセル)</span>';
-        if (spinUI) {
-            spinUI.style.opacity = '1';
-            spinUI.style.pointerEvents = 'auto';
+        if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
+    } else if (gameState === 'SELECT_ANY') {
+        document.getElementById('ui-hint').innerHTML = '盤上の好きな原子を選んでください！<br><span style="font-size:0.8em; font-weight:normal;">(このターンは任意の原子を打てます)</span>';
+        document.getElementById('ui-current-val').innerText = '任意';
+        if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
+    } else if (gameState === 'IDLE_ANY') {
+        document.getElementById('ui-hint').innerHTML = '引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(打つ原子を変えるには下のChangeを押す)</span>' 
+            + '<br><button onclick="playSeCancel(); window.cancelAnySelection()" style="padding:2px 10px; font-size:0.75rem; font-weight:bold; border-radius:4px; border:1px solid #aaa; background:#c0392b; color:#fff; cursor:pointer; margin-top:5px; box-shadow:0 2px 4px rgba(0,0,0,0.5);">🔄 Change</button>';
+        
+        let cue = balls.find(b => b.isCue);
+        if (cue) {
+            let curText = hideZ ? ELEMENTS[cue.z] : `${ELEMENTS[cue.z]} (${cue.z})`;
+            document.getElementById('ui-current-val').innerText = curText;
         }
-    } else {
+        if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
+    } else { // MOVING
         document.getElementById('ui-hint').innerHTML = '画面タップ連打でスピンを維持！<br><span style="font-size:0.8em; font-weight:normal;">(発射から5秒間有効)</span>';
-        if (spinUI) {
-            spinUI.style.opacity = '0.4';
-            spinUI.style.pointerEvents = 'none';
-        }
+        if (spinUI) { spinUI.style.opacity = '0.4'; spinUI.style.pointerEvents = 'none'; }
     }
 }
 
@@ -1990,7 +2049,7 @@ function showResult(isClear, reason = "") {
         title.innerText = "GAME OVER";
         title.style.color = "#e74c3c";
         if (reason === "overflow") {
-            desc.innerText = `盤面に原子が増えすぎました(40個以上)。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
+            desc.innerText = `盤面に原子が増えすぎました(50個以上)。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
         } else {
             desc.innerText = `ターン切れです。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
         }
@@ -2028,7 +2087,7 @@ function handleSpinInput(clientX, clientY) {
 }
 
 spinUI.addEventListener('pointerdown', e => {
-    if (gameState !== 'IDLE') return;
+    if (gameState !== 'IDLE' && gameState !== 'SELECT_ANY' && gameState !== 'IDLE_ANY') return;
     e.stopPropagation();
     isSpinDragging = true;
     spinUI.setPointerCapture(e.pointerId);
@@ -2057,7 +2116,26 @@ spinUI.addEventListener('pointercancel', stopSpinDrag);
 window.addEventListener('pointerdown', e => {
     if(e.target.tagName === 'BUTTON' || spinUI.contains(e.target) || e.target.tagName === 'INPUT') return;
     
-    if (gameState === 'IDLE') {
+    if (gameState === 'SELECT_ANY') {
+        if (e.target === canvas) {
+            let pos = getLogicalPos(e.clientX, e.clientY);
+            let clickedBall = null;
+            for (let i = balls.length - 1; i >= 0; i--) {
+                let b = balls[i];
+                let dist = Math.hypot(b.x - pos.x, b.y - pos.y);
+                if (dist <= b.radius + 15) {
+                    clickedBall = b;
+                    break;
+                }
+            }
+            if (clickedBall && !clickedBall.markedForDeletion) {
+                playSeSelect();
+                clickedBall.isCue = true;
+                gameState = 'IDLE_ANY';
+                updateUI();
+            }
+        }
+    } else if (gameState === 'IDLE' || gameState === 'IDLE_ANY') {
         if (e.target === canvas) {
             let cue = balls.find(b => b.isCue);
             if(cue) {
