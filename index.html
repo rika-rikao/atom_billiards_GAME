@@ -261,7 +261,7 @@
             background: var(--box-bg); padding: 6px 8px; border-radius: 8px;
             font-weight: bold; text-align: center; box-sizing: border-box;
             line-height: 1.3; border: 1px solid #3e5645;
-            min-height: 72px; /* ★内容変化時のガタつき防止 */
+            height: 90px; /* ★内容変化時のガタつき防止で固定 */
             display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
 
@@ -936,7 +936,7 @@ function getValidSpawnPosition(targetRadius, attempts = 300) {
     for (let i = 0; i < attempts; i++) {
         let x = targetRadius + margin + Math.random() * (cw - (targetRadius + margin) * 2);
         let y = targetRadius + margin + Math.random() * (ch - (targetRadius + margin) * 2);
-        return { x, y }; // 生成後はresolveOverlapsで解決するため、ここではランダム座標をそのまま返す
+        return { x, y }; 
     }
     return { x: cw/2, y: ch/2 };
 }
@@ -1289,7 +1289,6 @@ class Ball {
     }
 }
 
-// 【改修】重なり絶対防止処理（Relaxation）
 function resolveOverlaps() {
     let maxIterations = 50;
     let overlapFound = true;
@@ -1408,7 +1407,6 @@ function nextStage(isInitial = false) {
     nextCueZ = getRandomElementZ(targetZ, true);
     spawnCueBall();
     
-    // 生成直後の重なりを解消
     resolveOverlaps();
     
     resetSpinUI();
@@ -1430,7 +1428,6 @@ function spawnCueBall() {
     document.getElementById('ui-next-val').innerText = nextText;
 }
 
-// --- メイン物理ループ ---
 function update() {
     animationId = requestAnimationFrame(update);
     ctx.clearRect(0, 0, cw, ch);
@@ -1544,8 +1541,8 @@ function update() {
     }
 }
 
-// 【改修】シミュレーション用衝突処理（静止ボールは確実にスルーする）
-function checkCollisionSim(b1, b2, cueBallRef) {
+// --- 予測ガイド ---
+function checkCollisionSim(b1, b2, cueBallRef, targetReflectPoints) {
     let dx = b2.x - b1.x; let dy = b2.y - b1.y;
     let dist2 = dx*dx + dy*dy;
     let minDist = b1.radius + b2.radius;
@@ -1575,8 +1572,7 @@ function checkCollisionSim(b1, b2, cueBallRef) {
         let relVel = rvx * nx + rvy * ny;
 
         if (relVel > 0.05) { 
-            if (b1.isCue || b2.isCue) cueBallRef.hasReflected = true;
-            
+            let isCueHit = (b1.isCue || b2.isCue);
             let absRelVel = Math.hypot(rvx, rvy); 
             let speedRequirement = 0;
             if (requireSpeed) {
@@ -1585,6 +1581,12 @@ function checkCollisionSim(b1, b2, cueBallRef) {
             }
 
             if ((!requireSpeed) || (absRelVel >= speedRequirement)) {
+                if (isCueHit && !cueBallRef.hasReflected) {
+                    cueBallRef.hasReflected = true;
+                } else if (isCueHit) {
+                    cueBallRef.stopSim = true;
+                }
+                
                 let totalZ = b1.z + b2.z;
                 if (totalZ > 118) {
                     b1.markedForDeletion = true; b2.markedForDeletion = true; return;
@@ -1604,11 +1606,19 @@ function checkCollisionSim(b1, b2, cueBallRef) {
                 b2.markedForDeletion = true;
                 b1.vx *= 1.15; b1.vy *= 1.15;
                 return;
+            } else {
+                if (isCueHit && !cueBallRef.hasReflected) {
+                    cueBallRef.hasReflected = true;
+                    cueBallRef.hitTarget = b1.isCue ? b2 : b1;
+                    targetReflectPoints.push({ x: cueBallRef.hitTarget.x, y: cueBallRef.hitTarget.y });
+                } else if (isCueHit) {
+                    cueBallRef.stopSim = true;
+                }
+                
+                let j = (1 + RESTITUTION) * relVel / (1/b1.mass + 1/b2.mass);
+                b1.vx -= j * nx / b1.mass; b1.vy -= j * ny / b1.mass;
+                b2.vx += j * nx / b2.mass; b2.vy += j * ny / b2.mass;
             }
-            
-            let j = (1 + RESTITUTION) * relVel / (1/b1.mass + 1/b2.mass);
-            b1.vx -= j * nx / b1.mass; b1.vy -= j * ny / b1.mass;
-            b2.vx += j * nx / b2.mass; b2.vy += j * ny / b2.mass;
         }
     }
 }
@@ -1646,12 +1656,13 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
 
     let points = [{ x: simCue.x, y: simCue.y }];
     let afterReflectPoints = [];
-    let cueBallRef = { hasReflected: false };
+    let targetReflectPoints = [];
+    let cueBallRef = { hasReflected: false, hitTarget: null, stopSim: false };
 
     const MAX_FRAMES = 100;
     let stopSim = false;
 
-    for (let f = 0; f < MAX_FRAMES && !stopSim; f++) {
+    for (let f = 0; f < MAX_FRAMES && !stopSim && !cueBallRef.stopSim; f++) {
         spinMax = Math.max(0, spinMax - 0.0033);
         spinEnergy = Math.max(0, spinEnergy - 0.016);
 
@@ -1675,7 +1686,7 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
             for(let i=0; i<simBalls.length; i++) {
                 for(let j=i+1; j<simBalls.length; j++) {
                     if(!simBalls[i].markedForDeletion && !simBalls[j].markedForDeletion) {
-                        checkCollisionSim(simBalls[i], simBalls[j], cueBallRef);
+                        checkCollisionSim(simBalls[i], simBalls[j], cueBallRef, targetReflectPoints);
                     }
                 }
             }
@@ -1689,7 +1700,13 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
                 if(b.y + b.radius > ch) { b.y = ch - b.radius; b.vy = -Math.abs(b.vy) * RESTITUTION; hit = true; }
                 if(hit && Math.hypot(b.vx, b.vy) < 0.1) { b.vx = 0; b.vy = 0; }
                 
-                if (hit && b.isCue) cueBallRef.hasReflected = true;
+                if (hit && b.isCue) {
+                    if (!cueBallRef.hasReflected) {
+                        cueBallRef.hasReflected = true;
+                    } else {
+                        cueBallRef.stopSim = true;
+                    }
+                }
                 
                 if (step === SUB_STEPS - 1) {
                     b.vx *= b.friction; 
@@ -1708,6 +1725,9 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
                     points.push({ x: simCue.x, y: simCue.y });
                 } else {
                     afterReflectPoints.push({ x: simCue.x, y: simCue.y });
+                    if (cueBallRef.hitTarget && !cueBallRef.hitTarget.markedForDeletion) {
+                        targetReflectPoints.push({ x: cueBallRef.hitTarget.x, y: cueBallRef.hitTarget.y });
+                    }
                 }
             }
         }
@@ -1726,13 +1746,14 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
 
         if (!cueBallRef.hasReflected) {
             let lastPt = points[points.length - 1];
-            let prevPt = points[points.length - 2];
+            let prevPt = points.length > 1 ? points[points.length - 2] : lastPt;
             drawArrowHead(ctx, prevPt.x, prevPt.y, lastPt.x, lastPt.y, 'rgba(212, 175, 55, 0.95)', 18);
         }
     }
 
     if (cueBallRef.hasReflected && points.length > 0) {
         let reflectPoint = points[points.length - 1];
+        
         ctx.beginPath();
         ctx.arc(reflectPoint.x, reflectPoint.y, actualCue.radius, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
@@ -1759,6 +1780,21 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
             let lastPt = afterReflectPoints[afterReflectPoints.length - 1];
             let prevPt = afterReflectPoints.length > 1 ? afterReflectPoints[afterReflectPoints.length - 2] : reflectPoint;
             drawArrowHead(ctx, prevPt.x, prevPt.y, lastPt.x, lastPt.y, 'rgba(255, 215, 0, 0.95)', 16);
+        }
+        
+        if (targetReflectPoints.length > 0) {
+            ctx.beginPath();
+            ctx.setLineDash([6, 6]);
+            ctx.moveTo(targetReflectPoints[0].x, targetReflectPoints[0].y);
+            for (let p of targetReflectPoints) { ctx.lineTo(p.x, p.y); }
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            let lastPt = targetReflectPoints[targetReflectPoints.length - 1];
+            let prevPt = targetReflectPoints.length > 1 ? targetReflectPoints[targetReflectPoints.length - 2] : targetReflectPoints[0];
+            drawArrowHead(ctx, prevPt.x, prevPt.y, lastPt.x, lastPt.y, 'rgba(231, 76, 60, 0.95)', 16);
         }
     }
 
@@ -1833,28 +1869,60 @@ function checkCollision(b1, b2) {
                     
                     let centerX = (b1.x + b2.x) / 2;
                     let centerY = (b1.y + b2.y) / 2;
-                    createExplosion(centerX, centerY, '#c0392b', 220);
-                    createExplosion(centerX, centerY, '#d4af37', 220);
+                    let nRadius = getNeutronRadius(totalZ);
+                    createExplosion(centerX, centerY, '#c0392b', nRadius);
+                    createExplosion(centerX, centerY, '#d4af37', nRadius);
 
-                    let minX = Math.max(1, totalZ - 118);
-                    let maxX = Math.min(118, totalZ - 1);
-                    let z1 = Math.floor(Math.random() * (maxX - minX + 1)) + minX;
-                    let z2 = totalZ - z1;
+                    let oldMass1 = b1.mass;
+                    let oldMass2 = b2.mass;
+                    let newVx = (b1.vx * oldMass1 + b2.vx * oldMass2) / (oldMass1 + oldMass2);
+                    let newVy = (b1.vy * oldMass1 + b2.vy * oldMass2) / (oldMass1 + oldMass2);
 
-                    let r1 = 26 + Math.sqrt(z1) * 2.5;
-                    let r2 = 26 + Math.sqrt(z2) * 2.5;
-                    let sepDist = r1 + r2 + 10;
+                    let z1 = Math.max(1, Math.floor(totalZ / 2));
+                    let z2 = Math.max(1, totalZ - z1 - 1);
+                    if (z2 < 1) z2 = 1;
 
-                    let child1 = new Ball(centerX - nx * (sepDist/2), centerY - ny * (sepDist/2), z1);
-                    let child2 = new Ball(centerX + nx * (sepDist/2), centerY + ny * (sepDist/2), z2);
+                    let randAngle = Math.atan2(b1.vy - b2.vy, b1.vx - b2.vx);
+                    let angle1 = randAngle;
+                    let angle2 = randAngle + Math.PI * 2 / 3;
+                    let angle3 = randAngle + Math.PI * 4 / 3;
+
+                    let cr1 = 26 + Math.sqrt(z1) * 2.5;
+                    let cr2 = 26 + Math.sqrt(z2) * 2.5;
+                    let cr3 = 26 + Math.sqrt(1) * 2.5;
+                    let spawnOffset = Math.max(cr1, cr2, cr3) + 10;
+                    
+                    let child1 = new Ball(centerX + Math.cos(angle1) * spawnOffset, centerY + Math.sin(angle1) * spawnOffset, z1);
+                    let child2 = new Ball(centerX + Math.cos(angle2) * spawnOffset, centerY + Math.sin(angle2) * spawnOffset, z2);
+                    let child3 = new Ball(centerX + Math.cos(angle3) * spawnOffset, centerY + Math.sin(angle3) * spawnOffset, 1);
                     
                     let scatterSpeed = 8.0; 
-                    child1.vx = -nx * scatterSpeed; child1.vy = -ny * scatterSpeed;
-                    child2.vx = nx * scatterSpeed; child2.vy = ny * scatterSpeed;
+                    child1.vx = newVx + Math.cos(angle1) * scatterSpeed; child1.vy = newVy + Math.sin(angle1) * scatterSpeed;
+                    child2.vx = newVx + Math.cos(angle2) * scatterSpeed; child2.vy = newVy + Math.sin(angle2) * scatterSpeed;
+                    child3.vx = newVx + Math.cos(angle3) * scatterSpeed; child3.vy = newVy + Math.sin(angle3) * scatterSpeed;
                     
-                    balls.push(child1, child2);
+                    balls.push(child1, child2, child3);
                     
-                    // 【改修】分裂直後の重なりを静的に解決（速度は維持して弾け飛ぶ）
+                    createNeutronWave(centerX, centerY, totalZ);
+
+                    balls.forEach(target => {
+                        if(target !== b1 && target !== b2 && !target.markedForDeletion) {
+                            let dist = Math.hypot(target.x - centerX, target.y - centerY);
+                            if(dist < nRadius && target.z < 118) {
+                                if (useHalfLife && target.timer !== null && Math.random() < 0.5) {
+                                    target.timer = Math.max(0, target.timer - 1);
+                                    createExplosion(target.x, target.y, '#e74c3c', 100);
+                                } else {
+                                    target.z++;
+                                    target.updateProperties();
+                                    if(useHalfLife) target.timer = getHalfLife(target.z);
+                                    markSeen(target.z);
+                                    createExplosion(target.x, target.y, '#889e5c', 100);
+                                }
+                            }
+                        }
+                    });
+                    
                     resolveOverlaps();
                     return;
                 }
@@ -1889,6 +1957,68 @@ function checkCollision(b1, b2) {
     }
 }
 
+// 連鎖爆発処理
+function processFissions() {
+    let fissionTargets = balls.filter(b => !b.markedForDeletion && b.timer !== null && b.timer <= 0);
+    
+    if (fissionTargets.length > 0) {
+        let newBallsQueue = [];
+        
+        fissionTargets.forEach(b => {
+            b.markedForDeletion = true;
+            playSeFission();
+            let nRadius = getNeutronRadius(b.z);
+            createExplosion(b.x, b.y, '#c0392b', nRadius);
+
+            let z1 = Math.max(1, Math.floor(b.z / 2));
+            let z2 = Math.max(1, b.z - z1);
+            
+            let randAngle = Math.random() * Math.PI * 2;
+            let angle1 = randAngle;
+            let angle2 = randAngle + Math.PI * 2 / 3;
+            let angle3 = randAngle + Math.PI * 4 / 3;
+
+            let cr1 = 26 + Math.sqrt(z1) * 2.5;
+            let cr2 = 26 + Math.sqrt(z2) * 2.5;
+            let cr3 = 26 + Math.sqrt(1) * 2.5;
+            let spawnOffset = Math.max(cr1, cr2, cr3) + 10;
+            
+            let child1 = new Ball(b.x + Math.cos(angle1) * spawnOffset, b.y + Math.sin(angle1) * spawnOffset, z1);
+            let child2 = new Ball(b.x + Math.cos(angle2) * spawnOffset, b.y + Math.sin(angle2) * spawnOffset, z2);
+            let child3 = new Ball(b.x + Math.cos(angle3) * spawnOffset, b.y + Math.sin(angle3) * spawnOffset, 1);
+            
+            let speed = 8.0; 
+            child1.vx = Math.cos(angle1) * speed; child1.vy = Math.sin(angle1) * speed;
+            child2.vx = Math.cos(angle2) * speed; child2.vy = Math.sin(angle2) * speed;
+            child3.vx = Math.cos(angle3) * speed; child3.vy = Math.sin(angle3) * speed;
+            
+            newBallsQueue.push(child1, child2, child3);
+            createNeutronWave(b.x, b.y, b.z);
+
+            balls.forEach(target => {
+                if(target !== b && !target.markedForDeletion) {
+                    let dist = Math.hypot(target.x - b.x, target.y - b.y);
+                    if(dist < nRadius && target.z < 118) {
+                        if (target.timer !== null && Math.random() < 0.5) {
+                            target.timer = Math.max(0, target.timer - 1);
+                            createExplosion(target.x, target.y, '#e74c3c', 100);
+                        } else {
+                            target.z++;
+                            target.updateProperties();
+                            target.timer = getHalfLife(target.z);
+                            markSeen(target.z);
+                            createExplosion(target.x, target.y, '#889e5c', 100);
+                        }
+                    }
+                }
+            });
+        });
+        
+        balls = balls.filter(b => !b.markedForDeletion).concat(newBallsQueue);
+        processFissions(); 
+    }
+}
+
 /* === PRESERVED GAME SYSTEM: ターン終了処理 === */
 function endTurn() {
     turnsLeft--;
@@ -1901,73 +2031,21 @@ function endTurn() {
         return;
     }
     
-    let newBalls = [];
     if(useHalfLife) {
         balls.forEach(b => {
             b.isCue = false;
             b.spinEnergy = 0; b.spinMax = 0;
             if(b.timer !== null) {
                 b.timer--;
-                if(b.timer <= 0) {
-                    b.markedForDeletion = true;
-                    playSeFission();
-                    let nRadius = getNeutronRadius(b.z);
-                    createExplosion(b.x, b.y, '#c0392b', nRadius);
-
-                    let z1 = Math.max(1, Math.floor(b.z / 2));
-                    let z2 = Math.max(1, b.z - z1);
-                    
-                    let randAngle = Math.random() * Math.PI * 2;
-                    let angle1 = randAngle;
-                    let angle2 = randAngle + Math.PI * 2 / 3;
-                    let angle3 = randAngle + Math.PI * 4 / 3;
-
-                    let cr1 = 26 + Math.sqrt(z1) * 2.5;
-                    let cr2 = 26 + Math.sqrt(z2) * 2.5;
-                    let cr3 = 26 + Math.sqrt(1) * 2.5;
-                    let spawnOffset = Math.max(cr1, cr2, cr3) + 10;
-                    
-                    let child1 = new Ball(b.x + Math.cos(angle1) * spawnOffset, b.y + Math.sin(angle1) * spawnOffset, z1);
-                    let child2 = new Ball(b.x + Math.cos(angle2) * spawnOffset, b.y + Math.sin(angle2) * spawnOffset, z2);
-                    let child3 = new Ball(b.x + Math.cos(angle3) * spawnOffset, b.y + Math.sin(angle3) * spawnOffset, 1);
-                    
-                    let speed = 8.0; 
-                    child1.vx = Math.cos(angle1) * speed; child1.vy = Math.sin(angle1) * speed;
-                    child2.vx = Math.cos(angle2) * speed; child2.vy = Math.sin(angle2) * speed;
-                    child3.vx = Math.cos(angle3) * speed; child3.vy = Math.sin(angle3) * speed;
-                    
-                    newBalls.push(child1, child2, child3);
-                    
-                    createNeutronWave(b.x, b.y, b.z);
-
-                    balls.forEach(target => {
-                        if(target !== b && !target.markedForDeletion) {
-                            let dist = Math.hypot(target.x - b.x, target.y - b.y);
-                            if(dist < nRadius && target.z < 118) {
-                                if (target.timer !== null && Math.random() < 0.5) {
-                                    target.timer = Math.max(0, target.timer - 1);
-                                    createExplosion(target.x, target.y, '#e74c3c', 100);
-                                } else {
-                                    target.z++;
-                                    target.updateProperties();
-                                    target.timer = getHalfLife(target.z);
-                                    markSeen(target.z);
-                                    createExplosion(target.x, target.y, '#889e5c', 100);
-                                }
-                            }
-                        }
-                    });
-                }
             }
         });
+        processFissions();
     } else {
         balls.forEach(b => {
             b.isCue = false;
             b.spinEnergy = 0; b.spinMax = 0;
         });
     }
-    
-    balls = balls.filter(b => !b.markedForDeletion).concat(newBalls);
 
     if (spawnTurnCounter % 2 === 0) {
         let zNew = getRandomElementZ(targetZ);
@@ -1996,7 +2074,7 @@ function endTurn() {
         return;
     }
 
-    // 【改修】ターン終了時に全原子の運動量を確実にゼロにし、重なりを100%解決する
+    // ターン終了時に全原子の運動量を確実にゼロにし、重なりを100%解決する
     balls.forEach(b => {
         b.vx = 0;
         b.vy = 0;
@@ -2162,10 +2240,8 @@ window.addEventListener('pointerdown', e => {
             let cue = balls.find(b => b.isCue);
             if(cue) {
                 let pos = getLogicalPos(e.clientX, e.clientY);
-                // 距離判定を削除し、画面のどこでも引っ張り開始できるようにする
                 isDragging = true;
                 isCancelDrag = false;
-                // 始点を「玉の位置」ではなく「タップした位置」にする
                 dragStartX = pos.x;
                 dragStartY = pos.y;
                 dragCurrentX = pos.x; 
@@ -2189,9 +2265,8 @@ window.addEventListener('pointermove', e => {
 
         let cue = balls.find(b => b.isCue);
         if (cue) {
-            // 玉との距離ではなく、「タップした始点」との距離でキャンセル判定
             let distFromStart = Math.hypot(pos.x - dragStartX, pos.y - dragStartY);
-            if (distFromStart <= 20) { // 始点から20px以内に戻したらキャンセル
+            if (distFromStart <= 20) { 
                 isCancelDrag = true;
             } else {
                 isCancelDrag = false;
