@@ -261,6 +261,8 @@
             background: var(--box-bg); padding: 6px 8px; border-radius: 8px;
             font-weight: bold; text-align: center; box-sizing: border-box;
             line-height: 1.3; border: 1px solid #3e5645;
+            min-height: 72px; /* ★内容変化時のガタつき防止 */
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
 
         .cue-status-group {
@@ -664,10 +666,30 @@ document.getElementById('se-slider').value = savedSeVol;
 document.getElementById('bgm-val').innerText = Math.round(savedBgmVol * 100) + '%';
 document.getElementById('se-val').innerText = Math.round(savedSeVol * 100) + '%';
 
+// アプリケーションがバックグラウンドに移動した際のBGM制御
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        if (isBgmPlaying) {
+            bgmAudio.pause();
+        }
+        if (audioCtx.state === 'running') {
+            audioCtx.suspend();
+        }
+    } else {
+        if (isBgmPlaying && savedBgmVol > 0) {
+            bgmAudio.play().catch(e => console.log("BGM再開エラー:", e));
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+});
+
 // ボリューム変更イベント
 document.getElementById('bgm-slider').addEventListener('input', e => {
     let vol = parseFloat(e.target.value);
     bgmAudio.volume = vol;
+    savedBgmVol = vol; // バックグラウンド復帰時の判定用に更新
     document.getElementById('bgm-val').innerText = Math.round(vol * 100) + '%';
     localStorage.setItem('fusionBgmVolume', vol);
 });
