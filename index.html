@@ -419,13 +419,19 @@
             <!-- 縦画面の上部UI -->
             <div id="game-ui-top">
                 <button class="header-btn" onclick="playSeCancel(); showGiveUpModal()">リタイア</button>
-                <div class="header-box" style="margin: 0 10px;">
-                    <div class="header-label">TARGET</div>
-                    <div class="header-value" id="ui-target-top">--</div>
-                </div>
-                <div class="header-box">
-                    <div class="header-label">TURNS</div>
-                    <div class="header-value" id="ui-turns-top">--</div>
+                <div style="display: flex; gap: 5px; flex: 1; margin-left: 10px;">
+                    <div class="header-box">
+                        <div class="header-label">TARGET</div>
+                        <div class="header-value" id="ui-target-top">--</div>
+                    </div>
+                    <div class="header-box">
+                        <div class="header-label">ATOMS</div>
+                        <div class="header-value" id="ui-atoms-top">0/40</div>
+                    </div>
+                    <div class="header-box">
+                        <div class="header-label">TURNS</div>
+                        <div class="header-value" id="ui-turns-top">--</div>
+                    </div>
                 </div>
             </div>
 
@@ -441,14 +447,20 @@
                 <div class="landscape-header">
                     <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                         <button class="header-btn" onclick="playSeCancel(); showGiveUpModal()">リタイア</button>
-                        <div class="header-box">
+                        <div class="header-box" style="margin-left: 8px;">
                             <div class="header-label">TURNS</div>
                             <div class="header-value" id="ui-turns-side">--</div>
                         </div>
                     </div>
-                    <div class="header-box" style="width:100%;">
-                        <div class="header-label">TARGET</div>
-                        <div class="header-value" id="ui-target-side">--</div>
+                    <div style="display:flex; gap: 8px; width:100%;">
+                        <div class="header-box" style="flex:1;">
+                            <div class="header-label">TARGET</div>
+                            <div class="header-value" id="ui-target-side">--</div>
+                        </div>
+                        <div class="header-box" style="flex:1;">
+                            <div class="header-label">ATOMS</div>
+                            <div class="header-value" id="ui-atoms-side">0/40</div>
+                        </div>
                     </div>
                 </div>
 
@@ -509,7 +521,7 @@
         </div>
     </div>
 
-    <div id="rule-modal" class="modal">
+    <div id="rule-modal" class="modal" onclick="if(event.target === this) { playSeCancel(); closeModal('rule-modal'); }">
         <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
             <h2 class="modal-title" style="text-align:center;">📖 ルール・説明書</h2>
             <div class="modal-desc" style="font-size:0.95rem; line-height:1.6; color:var(--text-main); text-align:left;">
@@ -580,7 +592,7 @@
         <div class="modal-content">
             <h2 class="modal-title">確認</h2>
             <div class="modal-desc">現在のゲームを終了してタイトルに戻りますか？</div>
-            <button class="modal-btn" style="background:#b05530;" onclick="playSeCancel(); returnToTitle()">終了する</button>
+            <button class="modal-btn" style="background:#b05530;" onclick="playSeDecide(); returnToTitle()">終了する</button>
             <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('giveup-modal')">続ける</button>
         </div>
     </div>
@@ -601,6 +613,9 @@ seGainNode.connect(audioCtx.destination);
 // デコード済みの音声データを保持する変数
 let decideBuffer = null;
 let cancelBuffer = null;
+let shootBuffer = null;
+let collideBuffer = null;
+let fissionBuffer = null;
 
 // 音声ファイルを非同期で読み込み、バッファに変換する関数
 async function loadAudioBuffer(url) {
@@ -619,6 +634,12 @@ loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768898/oa
     .then(buffer => decideBuffer = buffer);
 loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768899/ffxuqelyqtnus0yfckts_t2jttx.m4a')
     .then(buffer => cancelBuffer = buffer);
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836069/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF_wttumb.m4a')
+    .then(buffer => shootBuffer = buffer);
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836066/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E7%90%83%E5%90%8C%E5%A3%AB%E3%81%8C%E8%A1%9D%E7%AA%81_yuxdfk.m4a')
+    .then(buffer => collideBuffer = buffer);
+loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836070/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E3%83%96%E3%83%AC%E3%82%A4%E3%82%AF_%E6%A0%B8%E5%88%86%E8%A3%82ver_wtdafa.m4a')
+    .then(buffer => fissionBuffer = buffer);
 
 // --- BGMの設定 (長尺なので HTML5 Audio のままが推奨されます) ---
 const bgmAudio = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768472/atommic_billiards_loop_fqnn47.m4a');
@@ -688,6 +709,21 @@ function playAudioSlice(buffer, startTime, duration) {
     source.start(0, startTime, duration);
 }
 
+// フル尺で再生する関数 (必要に応じて音量調整用ローカルGain追加)
+function playAudioFull(buffer, maxVolume = 1.0) {
+    if (!buffer) return;
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    
+    const localGain = audioCtx.createGain();
+    localGain.gain.value = maxVolume;
+    
+    source.connect(localGain);
+    localGain.connect(seGainNode);
+    
+    source.start(0);
+}
+
 // 0.015秒～0.3秒を再生 (再生時間は 0.3 - 0.015 = 0.285秒)
 function playSeDecide() {
     playBgm();
@@ -698,6 +734,29 @@ function playSeDecide() {
 function playSeCancel() {
     playBgm();
     playAudioSlice(cancelBuffer, 0.019, 0.108);
+}
+
+function playSeShoot() {
+    playBgm();
+    playAudioFull(shootBuffer);
+}
+
+let lastCollideTime = 0;
+function playSeCollide(intensity) {
+    let now = Date.now();
+    if (now - lastCollideTime < 30) return;
+    lastCollideTime = now;
+    
+    playBgm();
+    let vol = Math.min(1.0, intensity / 20);
+    if (vol < 0.05) return;
+    
+    playAudioFull(collideBuffer, vol);
+}
+
+function playSeFission() {
+    playBgm();
+    playAudioFull(fissionBuffer);
 }
 
 // 初回タップでBGM再生とAudioContextの有効化
@@ -1081,6 +1140,19 @@ class Ball {
         ctx.fillStyle = baseColor;
         ctx.fill();
 
+        if (this.z === targetZ && !this.markedForDeletion) {
+            let glow = (Math.sin(Date.now() / 150) + 1) / 2;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 6 + glow * 8, 0, Math.PI * 2);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = `rgba(255, 140, 0, ${0.4 + glow * 0.6})`;
+            ctx.shadowColor = 'orange';
+            ctx.shadowBlur = 15;
+            ctx.stroke();
+            ctx.restore();
+        }
+
         if (this.isCue) {
             let pulse = (Math.sin(Date.now() / 200) + 1) / 2;
             ctx.save();
@@ -1134,14 +1206,13 @@ class Ball {
             let isWarning = (this.timer <= 3);
             ctx.save();
             
-            // ★ 半減期のフォントサイズ拡大 & 位置調整
             ctx.font = `bold ${Math.max(28, this.radius * 1.15)}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
             let timerText = "⏳" + this.timer;
-            let badgeX = this.x + this.radius * 0.4; // 少し内側に寄せる[span_0](start_span)[span_0](end_span)
-            let badgeY = this.y - this.radius * 1.2; // Y座標をマイナスにして上に持ち上げる[span_1](start_span)[span_1](end_span)
+            let badgeX = this.x + this.radius * 0.75; 
+            let badgeY = this.y - this.radius * 0.75; 
 
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
             ctx.lineWidth = 4;
@@ -1285,7 +1356,7 @@ function spawnCueBall() {
     let pos = getValidSpawnPosition(radius);
     balls.push(new Ball(pos.x, pos.y, currentZ, true));
     
-    let curText = ELEMENTS[currentZ] || '?';
+    let curText = hideZ ? ELEMENTS[currentZ] : `${ELEMENTS[currentZ]} (${currentZ})`;
     document.getElementById('ui-current-val').innerText = curText;
 
     nextCueZ = getRandomElementZ(targetZ, true);
@@ -1484,7 +1555,7 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
 
     const MAX_PULL = Math.min(cw, ch) * 0.35;
     let ratio = Math.min(1.0, pullDist / MAX_PULL);
-    let initialSpeed = 1.5 + ratio * (MAX_SPEED - 1.5);
+    let initialSpeed = 0.5 + ratio * (MAX_SPEED - 0.5);
     let angle = Math.atan2(pullDy, pullDx);
 
     let actualCue = balls.find(b => b.isCue);
@@ -1500,6 +1571,8 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
     simCue.vx = Math.cos(angle) * initialSpeed;
     simCue.vy = Math.sin(angle) * initialSpeed;
 
+    const SUB_STEPS = Math.max(4, Math.ceil(initialSpeed / 4));
+
     let spinEnergy = 1.0;
     let spinMax = 1.0;
     let sX = setSpinX;
@@ -1509,7 +1582,6 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
     let afterReflectPoints = [];
     let cueBallRef = { hasReflected: false };
 
-    const SUB_STEPS = 4;
     const MAX_FRAMES = 100;
     let stopSim = false;
 
@@ -1674,6 +1746,8 @@ function checkCollision(b1, b2) {
         let relVel = rvx * nx + rvy * ny;
 
         if (relVel > 0.05) { 
+            playSeCollide(relVel);
+            
             let absRelVel = Math.hypot(rvx, rvy); 
             let totalZ = b1.z + b2.z;
             
@@ -1689,6 +1763,7 @@ function checkCollision(b1, b2) {
                 if (totalZ > 118) {
                     b1.markedForDeletion = true;
                     b2.markedForDeletion = true;
+                    playSeFission();
                     
                     let centerX = (b1.x + b2.x) / 2;
                     let centerY = (b1.y + b2.y) / 2;
@@ -1768,25 +1843,33 @@ function endTurn() {
                 b.timer--;
                 if(b.timer <= 0) {
                     b.markedForDeletion = true;
+                    playSeFission();
                     let nRadius = getNeutronRadius(b.z);
                     createExplosion(b.x, b.y, '#c0392b', nRadius);
 
                     let z1 = Math.max(1, Math.floor(b.z / 2));
                     let z2 = Math.max(1, b.z - z1);
                     
+                    let randAngle = Math.random() * Math.PI * 2;
+                    let angle1 = randAngle;
+                    let angle2 = randAngle + Math.PI * 2 / 3;
+                    let angle3 = randAngle + Math.PI * 4 / 3;
+
                     let cr1 = 26 + Math.sqrt(z1) * 2.5;
                     let cr2 = 26 + Math.sqrt(z2) * 2.5;
-                    let spawnOffset = cr1 + cr2 + 6;
+                    let cr3 = 26 + Math.sqrt(1) * 2.5;
+                    let spawnOffset = Math.max(cr1, cr2, cr3) + 10;
                     
-                    let randAngle = Math.random() * Math.PI * 2;
-                    let child1 = new Ball(b.x - Math.cos(randAngle) * (spawnOffset / 2), b.y - Math.sin(randAngle) * (spawnOffset / 2), z1);
-                    let child2 = new Ball(b.x + Math.cos(randAngle) * (spawnOffset / 2), b.y + Math.sin(randAngle) * (spawnOffset / 2), z2);
+                    let child1 = new Ball(b.x + Math.cos(angle1) * spawnOffset, b.y + Math.sin(angle1) * spawnOffset, z1);
+                    let child2 = new Ball(b.x + Math.cos(angle2) * spawnOffset, b.y + Math.sin(angle2) * spawnOffset, z2);
+                    let child3 = new Ball(b.x + Math.cos(angle3) * spawnOffset, b.y + Math.sin(angle3) * spawnOffset, 1);
                     
                     let speed = 8.0; 
-                    child1.vx = -Math.cos(randAngle) * speed; child1.vy = -Math.sin(randAngle) * speed;
-                    child2.vx = Math.cos(randAngle) * speed; child2.vy = Math.sin(randAngle) * speed;
+                    child1.vx = Math.cos(angle1) * speed; child1.vy = Math.sin(angle1) * speed;
+                    child2.vx = Math.cos(angle2) * speed; child2.vy = Math.sin(angle2) * speed;
+                    child3.vx = Math.cos(angle3) * speed; child3.vy = Math.sin(angle3) * speed;
                     
-                    newBalls.push(child1, child2);
+                    newBalls.push(child1, child2, child3);
                     
                     createNeutronWave(b.x, b.y, b.z);
 
@@ -1794,11 +1877,16 @@ function endTurn() {
                         if(target !== b && !target.markedForDeletion) {
                             let dist = Math.hypot(target.x - b.x, target.y - b.y);
                             if(dist < nRadius && target.z < 118) {
-                                target.z++;
-                                target.updateProperties();
-                                target.timer = getHalfLife(target.z);
-                                markSeen(target.z);
-                                createExplosion(target.x, target.y, '#889e5c', 100);
+                                if (target.timer !== null && Math.random() < 0.5) {
+                                    target.timer = Math.max(0, target.timer - 1);
+                                    createExplosion(target.x, target.y, '#e74c3c', 100);
+                                } else {
+                                    target.z++;
+                                    target.updateProperties();
+                                    target.timer = getHalfLife(target.z);
+                                    markSeen(target.z);
+                                    createExplosion(target.x, target.y, '#889e5c', 100);
+                                }
                             }
                         }
                     });
@@ -1863,6 +1951,11 @@ function updateUI() {
         sideTurns.classList.remove('danger');
     }
     
+    let fieldBalls = balls.filter(b => !b.isCue && !b.markedForDeletion);
+    let atomsCount = fieldBalls.length;
+    document.getElementById('ui-atoms-top').innerText = `${atomsCount}/40`;
+    document.getElementById('ui-atoms-side').innerText = `${atomsCount}/40`;
+    
     let spinUI = document.getElementById('spin-ui');
     
     if (gameState === 'IDLE') {
@@ -1889,7 +1982,9 @@ function showResult(isClear, reason = "") {
     if(isClear) {
         title.innerText = "CLEAR!";
         title.style.color = "#d4af37";
-        desc.innerText = `見事 ${ELEMENTS[targetZ]} を生成しました！\n周期表・実績に記録されました。`;
+        desc.innerText = currentMode === 3 
+            ? `見事 ${ELEMENTS[targetZ]} を生成しました！\n周期表・実績に記録されました。`
+            : `見事 ${ELEMENTS[targetZ]} を生成しました！`;
         modal.querySelector('.modal-btn').style.display = 'block';
     } else {
         title.innerText = "GAME OVER";
@@ -1967,10 +2062,10 @@ window.addEventListener('pointerdown', e => {
             let cue = balls.find(b => b.isCue);
             if(cue) {
                 let pos = getLogicalPos(e.clientX, e.clientY);
-                // 距離判定を削除し、画面のどこでも引っ張り開始できるようにする[span_2](start_span)[span_2](end_span)
+                // 距離判定を削除し、画面のどこでも引っ張り開始できるようにする
                 isDragging = true;
                 isCancelDrag = false;
-                // 始点を「玉の位置」ではなく「タップした位置」にする[span_3](start_span)[span_3](end_span)
+                // 始点を「玉の位置」ではなく「タップした位置」にする
                 dragStartX = pos.x;
                 dragStartY = pos.y;
                 dragCurrentX = pos.x; 
@@ -1994,7 +2089,7 @@ window.addEventListener('pointermove', e => {
 
         let cue = balls.find(b => b.isCue);
         if (cue) {
-            // 玉との距離ではなく、「タップした始点」との距離でキャンセル判定[span_4](start_span)[span_4](end_span)
+            // 玉との距離ではなく、「タップした始点」との距離でキャンセル判定
             let distFromStart = Math.hypot(pos.x - dragStartX, pos.y - dragStartY);
             if (distFromStart <= 20) { // 始点から20px以内に戻したらキャンセル
                 isCancelDrag = true;
@@ -2027,9 +2122,9 @@ window.addEventListener('pointerup', e => {
                 pullDist = MAX_PULL;
             }
             
-            if(pullDist > 12) {
+            if(pullDist > 8) {
                 let ratio = pullDist / MAX_PULL;
-                let speed = 1.5 + ratio * (MAX_SPEED - 1.5);
+                let speed = 0.5 + ratio * (MAX_SPEED - 0.5);
                 let angle = Math.atan2(dy, dx);
                 
                 cue.vx = Math.cos(angle) * speed;
@@ -2042,6 +2137,7 @@ window.addEventListener('pointerup', e => {
                 
                 shootTime = Date.now(); 
                 gameState = 'MOVING';
+                playSeShoot();
                 updateUI();
             }
         }
