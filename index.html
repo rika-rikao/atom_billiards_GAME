@@ -349,6 +349,47 @@
             -webkit-appearance: none; margin-top: -7px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
+
+        /* 臨界ゲージ */
+        #critical-gauge {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+        .critical-text {
+            color: #e74c3c;
+            font-size: 0.8rem;
+            font-weight: bold;
+            writing-mode: vertical-rl;
+            letter-spacing: 2px;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .critical-bar {
+            width: 14px;
+            height: 250px;
+            background: rgba(10, 20, 14, 0.8);
+            border: 2px solid #3e5645;
+            border-radius: 7px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            overflow: hidden;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5);
+        }
+        #critical-fill {
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to top, #f39c12, #e67e22, #e74c3c);
+            transition: height 0.1s linear;
+        }
     </style>
 </head>
 <body>
@@ -441,6 +482,14 @@
             <div id="game-board-wrapper">
                 <!-- レイヤー3：原子移動エリア (Canvas) -->
                 <canvas id="gameCanvas"></canvas>
+
+                <!-- 臨界ゲージ -->
+                <div id="critical-gauge">
+                    <div class="critical-text">CRITICAL</div>
+                    <div class="critical-bar">
+                        <div id="critical-fill"></div>
+                    </div>
+                </div>
             </div>
             
             <!-- 画面下部UI -->
@@ -547,7 +596,8 @@
 
                 <p><strong>💀 ゲームオーバー</strong><br>
                 ・ターン数（TURNS）が 0 になる<br>
-                ・盤面内に原子が「50個」以上あふれる</p>
+                ・盤面内に原子が「50個」以上あふれる<br>
+                ・連鎖分裂が限界を突破しメルトダウンする</p>
             </div>
             <button class="modal-btn secondary" onclick="playSeCancel(); closeModal('rule-modal')">閉じる</button>
         </div>
@@ -888,6 +938,10 @@ let setSpinY = 0;
 
 let requireSpeed = false, useHalfLife = false, hideZ = false;
 
+// 臨界ゲージ管理
+let criticalValue = 0;
+const CRITICAL_MAX = 100;
+
 let seenElements = JSON.parse(localStorage.getItem('fusionSeenElements')) || [];
 let clearedElements = JSON.parse(localStorage.getItem('fusionClearedElements')) || [];
 
@@ -994,6 +1048,11 @@ function returnToTitle() {
     closeModal('result-modal');
     closeModal('crown-modal');
     closeModal('rule-modal');
+    
+    criticalValue = 0;
+    let fillEl = document.getElementById('critical-fill');
+    if (fillEl) fillEl.style.height = '0%';
+
     switchScreen('title-screen');
 }
 
@@ -1396,6 +1455,10 @@ function nextStage(isInitial = false) {
     turnCountTotal = 1;
     isAnySelectTurn = false;
     
+    criticalValue = 0;
+    let fillEl = document.getElementById('critical-fill');
+    if (fillEl) fillEl.style.height = '0%';
+    
     let initialCount = Math.floor(Math.random() * 3) + 3;
     for(let i = 0; i < initialCount; i++) {
         let z = getRandomElementZ(targetZ);
@@ -1430,6 +1493,23 @@ function spawnCueBall() {
 
 function update() {
     animationId = requestAnimationFrame(update);
+    
+    // --- 臨界ゲージ処理 ---
+    if (gameState !== 'GAMEOVER') {
+        if (criticalValue > 0) {
+            criticalValue -= 0.5;
+            if (criticalValue < 0) criticalValue = 0;
+        }
+        let fillEl = document.getElementById('critical-fill');
+        if (fillEl) {
+            fillEl.style.height = `${(criticalValue / CRITICAL_MAX) * 100}%`;
+        }
+        if (criticalValue >= CRITICAL_MAX) {
+            triggerMeltdown();
+        }
+    }
+    // -----------------------
+
     ctx.clearRect(0, 0, cw, ch);
     
     ctx.fillStyle = '#152219';
@@ -1873,6 +1953,11 @@ function checkCollision(b1, b2) {
                     createExplosion(centerX, centerY, '#c0392b', nRadius);
                     createExplosion(centerX, centerY, '#d4af37', nRadius);
 
+                    criticalValue += 15;
+                    if (criticalValue >= CRITICAL_MAX && gameState !== 'GAMEOVER') {
+                        triggerMeltdown();
+                    }
+
                     let oldMass1 = b1.mass;
                     let oldMass2 = b2.mass;
                     let newVx = (b1.vx * oldMass1 + b2.vx * oldMass2) / (oldMass1 + oldMass2);
@@ -1901,8 +1986,6 @@ function checkCollision(b1, b2) {
                     child2.vx = newVx + Math.cos(angle2) * scatterSpeed; child2.vy = newVy + Math.sin(angle2) * scatterSpeed;
                     child3.vx = newVx + Math.cos(angle3) * scatterSpeed; child3.vy = newVy + Math.sin(angle3) * scatterSpeed;
                     
-                    balls.push(child1, child2, child3);
-                    
                     createNeutronWave(centerX, centerY, totalZ);
 
                     balls.forEach(target => {
@@ -1922,6 +2005,9 @@ function checkCollision(b1, b2) {
                             }
                         }
                     });
+                    
+                    // 中性子線の判定が終わった後に子玉を追加する
+                    balls.push(child1, child2, child3);
                     
                     resolveOverlaps();
                     return;
@@ -1970,6 +2056,11 @@ function processFissions() {
             let nRadius = getNeutronRadius(b.z);
             createExplosion(b.x, b.y, '#c0392b', nRadius);
 
+            criticalValue += 15;
+            if (criticalValue >= CRITICAL_MAX && gameState !== 'GAMEOVER') {
+                triggerMeltdown();
+            }
+
             let z1 = Math.max(1, Math.floor(b.z / 2));
             let z2 = Math.max(1, b.z - z1);
             
@@ -2015,6 +2106,9 @@ function processFissions() {
         });
         
         balls = balls.filter(b => !b.markedForDeletion).concat(newBallsQueue);
+        
+        if (criticalValue >= CRITICAL_MAX) return;
+        
         processFissions(); 
     }
 }
@@ -2132,6 +2226,12 @@ function updateUI() {
     }
 }
 
+function triggerMeltdown() {
+    if (gameState === 'GAMEOVER') return;
+    gameState = 'GAMEOVER';
+    showResult(false, "meltdown");
+}
+
 function showResult(isClear, reason = "") {
     gameState = 'GAMEOVER';
     const modal = document.getElementById('result-modal');
@@ -2150,6 +2250,8 @@ function showResult(isClear, reason = "") {
         title.style.color = "#e74c3c";
         if (reason === "overflow") {
             desc.innerText = `盤面に原子が増えすぎました(50個以上)。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
+        } else if (reason === "meltdown") {
+            desc.innerText = `連鎖分裂が限界を突破しメルトダウンしました！\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
         } else {
             desc.innerText = `ターン切れです。\n目標の ${ELEMENTS[targetZ]} を生成できませんでした。`;
         }
