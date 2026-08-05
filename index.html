@@ -390,6 +390,53 @@
             background: linear-gradient(to top, #f39c12, #e67e22, #e74c3c);
             transition: height 0.1s linear;
         }
+
+        /* スピン残り時間ゲージ */
+        #spin-time-gauge {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        @media (orientation: portrait) {
+            #spin-time-gauge {
+                display: flex;
+            }
+        }
+        .spin-time-text {
+            color: #3498db;
+            font-size: 0.8rem;
+            font-weight: bold;
+            writing-mode: vertical-rl;
+            letter-spacing: 2px;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .spin-time-bar {
+            width: 14px;
+            height: 250px;
+            background: rgba(10, 20, 14, 0.8);
+            border: 2px solid #3e5645;
+            border-radius: 7px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            overflow: hidden;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5);
+        }
+        #spin-time-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to top, #2980b9, #3498db, #85c1e9);
+            transition: height 0.1s linear;
+        }
     </style>
 </head>
 <body>
@@ -482,6 +529,14 @@
             <div id="game-board-wrapper">
                 <!-- レイヤー3：原子移動エリア (Canvas) -->
                 <canvas id="gameCanvas"></canvas>
+
+                <!-- スピン残り時間ゲージ -->
+                <div id="spin-time-gauge">
+                    <div class="spin-time-text">SPIN TIME</div>
+                    <div class="spin-time-bar">
+                        <div id="spin-time-fill"></div>
+                    </div>
+                </div>
 
                 <!-- 臨界ゲージ -->
                 <div id="critical-gauge">
@@ -941,6 +996,7 @@ let requireSpeed = false, useHalfLife = false, hideZ = false;
 // 臨界ゲージ管理
 let criticalValue = 0;
 const CRITICAL_MAX = 100;
+let meltdownStartTime = 0;
 
 let seenElements = JSON.parse(localStorage.getItem('fusionSeenElements')) || [];
 let clearedElements = JSON.parse(localStorage.getItem('fusionClearedElements')) || [];
@@ -1050,6 +1106,7 @@ function returnToTitle() {
     closeModal('rule-modal');
     
     criticalValue = 0;
+    meltdownStartTime = 0;
     let fillEl = document.getElementById('critical-fill');
     if (fillEl) fillEl.style.height = '0%';
 
@@ -1456,6 +1513,7 @@ function nextStage(isInitial = false) {
     isAnySelectTurn = false;
     
     criticalValue = 0;
+    meltdownStartTime = 0;
     let fillEl = document.getElementById('critical-fill');
     if (fillEl) fillEl.style.height = '0%';
     
@@ -1502,11 +1560,39 @@ function update() {
         }
         let fillEl = document.getElementById('critical-fill');
         if (fillEl) {
-            fillEl.style.height = `${(criticalValue / CRITICAL_MAX) * 100}%`;
+            fillEl.style.height = `${Math.min(100, (criticalValue / CRITICAL_MAX) * 100)}%`;
         }
+        
         if (criticalValue >= CRITICAL_MAX) {
-            triggerMeltdown();
+            if (meltdownStartTime === 0) {
+                meltdownStartTime = Date.now();
+            } else if (Date.now() - meltdownStartTime >= 5000) {
+                triggerMeltdown();
+            }
+        } else {
+            meltdownStartTime = 0;
         }
+    }
+    // -----------------------
+
+    // --- スピン残り時間ゲージ処理 ---
+    let spinGauge = document.getElementById('spin-time-gauge');
+    let spinFillEl = document.getElementById('spin-time-fill');
+    if (gameState === 'MOVING') {
+        let timeElapsed = Date.now() - shootTime;
+        if (timeElapsed <= 5000) {
+            if (spinGauge) spinGauge.style.opacity = '0.85';
+            let remainPercent = Math.max(0, 100 - (timeElapsed / 5000) * 100);
+            if (spinFillEl) {
+                spinFillEl.style.height = `${remainPercent}%`;
+            }
+        } else {
+            if (spinGauge) spinGauge.style.opacity = '0';
+            if (spinFillEl) spinFillEl.style.height = '0%';
+        }
+    } else {
+        if (spinGauge) spinGauge.style.opacity = '0';
+        if (spinFillEl) spinFillEl.style.height = '100%';
     }
     // -----------------------
 
@@ -1954,9 +2040,6 @@ function checkCollision(b1, b2) {
                     createExplosion(centerX, centerY, '#d4af37', nRadius);
 
                     criticalValue += 15;
-                    if (criticalValue >= CRITICAL_MAX && gameState !== 'GAMEOVER') {
-                        triggerMeltdown();
-                    }
 
                     let oldMass1 = b1.mass;
                     let oldMass2 = b2.mass;
@@ -2057,9 +2140,6 @@ function processFissions() {
             createExplosion(b.x, b.y, '#c0392b', nRadius);
 
             criticalValue += 15;
-            if (criticalValue >= CRITICAL_MAX && gameState !== 'GAMEOVER') {
-                triggerMeltdown();
-            }
 
             let z1 = Math.max(1, Math.floor(b.z / 2));
             let z2 = Math.max(1, b.z - z1);
@@ -2107,7 +2187,7 @@ function processFissions() {
         
         balls = balls.filter(b => !b.markedForDeletion).concat(newBallsQueue);
         
-        if (criticalValue >= CRITICAL_MAX) return;
+        if (criticalValue >= CRITICAL_MAX * 10) return;
         
         processFissions(); 
     }
