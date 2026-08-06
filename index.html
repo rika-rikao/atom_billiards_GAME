@@ -739,6 +739,11 @@
 
 <script>
 /* =====================================================================
+   円周率定数化 (パフォーマンス改善)
+===================================================================== */
+const PI2 = Math.PI * 2;
+
+/* =====================================================================
    オーディオ管理 (BGM / SE) - Web Audio API 対応版
 ===================================================================== */
 
@@ -972,6 +977,12 @@ let criticalValue = 0;
 const CRITICAL_MAX = 100;
 let meltdownStartTime = 0;
 
+// ★改修: 軌道予測(シミュレーション)キャッシュ管理
+let simCache = {
+    dx: null, dy: null, spinX: null, spinY: null, cueX: null, cueY: null,
+    points: null, afterReflectPoints: null, targetReflectPoints: null, cueBallRef: null
+};
+
 let seenElements = JSON.parse(localStorage.getItem('fusionSeenElements')) || [];
 let clearedElements = JSON.parse(localStorage.getItem('fusionClearedElements')) || [];
 
@@ -1178,7 +1189,7 @@ class Particle {
             this.life = 1.0;
             this.color = color;
         } else {
-            let angle = Math.random() * Math.PI * 2;
+            let angle = Math.random() * PI2;
             let speed = Math.random() * (maxRadius / 15) + 3; 
             this.vx = Math.cos(angle) * speed;
             this.vy = Math.sin(angle) * speed;
@@ -1202,14 +1213,14 @@ class Particle {
         ctx.globalAlpha = Math.max(0, this.life);
         if (this.type === 'ring') {
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius, 0, PI2);
             ctx.strokeStyle = this.color;
             ctx.lineWidth = 3;
             ctx.stroke();
         } else {
             ctx.fillStyle = this.color;
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.size, 0, PI2);
             ctx.fill();
         }
         ctx.restore();
@@ -1230,7 +1241,7 @@ function createNeutronWave(x, y, z) {
     let radiusScale = getNeutronRadius(z);
     particles.push(new Particle(x, y, '#a4be75', 'ring', radiusScale));
     for(let i = 0; i < 24; i++) {
-        let angle = (Math.PI * 2 / 24) * i;
+        let angle = (PI2 / 24) * i;
         let p = new Particle(x, y, '#ffffff', 'normal', radiusScale);
         let speed = (radiusScale / 20);
         p.vx = Math.cos(angle) * speed;
@@ -1269,7 +1280,7 @@ class Ball {
         let baseColor = this.z === 26 ? '#7a6a5a' : `hsl(${hue}, 45%, 40%)`;
         
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.radius, 0, PI2);
         ctx.fillStyle = baseColor;
         ctx.fill();
 
@@ -1277,7 +1288,7 @@ class Ball {
             let glow = (Math.sin(Date.now() / 150) + 1) / 2;
             ctx.save();
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 6 + glow * 8, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius + 6 + glow * 8, 0, PI2);
             ctx.lineWidth = 4;
             ctx.strokeStyle = `rgba(255, 140, 0, ${0.4 + glow * 0.6})`;
             ctx.shadowColor = 'orange';
@@ -1312,7 +1323,7 @@ class Ball {
             ctx.save();
             
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 5 + pulse * 3, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius + 5 + pulse * 3, 0, PI2);
             ctx.lineWidth = 4;
             ctx.strokeStyle = '#d4af37';
             ctx.shadowColor = '#d4af37';
@@ -1320,7 +1331,7 @@ class Ball {
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius, 0, PI2);
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#ffffff';
             ctx.stroke();
@@ -1331,7 +1342,7 @@ class Ball {
             let blinkAlpha = (Math.sin(Date.now() / 100) + 1) / 2;
             ctx.save();
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, this.radius, 0, PI2);
             ctx.fillStyle = `rgba(192, 57, 43, ${0.3 + blinkAlpha * 0.5})`;
             ctx.fill();
             ctx.restore();
@@ -1431,7 +1442,8 @@ function resize() {
     } else {
         cw = 1000; ch = 2000;
     }
-    const dpr = window.devicePixelRatio || 1;
+    // ★改修: 高解像度端末（Galaxy Tab S7等）におけるピクセル計算爆発を抑えるための解像度制限
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.0);
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0); 
@@ -1540,7 +1552,7 @@ function update() {
         if (criticalValue >= CRITICAL_MAX) {
             if (meltdownStartTime === 0) {
                 meltdownStartTime = Date.now();
-            } else if (Date.now() - meltdownStartTime >= 10000) { // ★改修: 10秒メルトダウン
+            } else if (Date.now() - meltdownStartTime >= 10000) { 
                 triggerMeltdown();
             }
         } else {
@@ -1659,11 +1671,10 @@ function update() {
     particles = particles.filter(p => p.life > 0);
     particles.forEach(p => p.draw(ctx));
     
-    // ★改修: 引っ張り時のタップ位置・キャンセル目安のシャドー表示
     if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(dragStartX, dragStartY, 20, 0, Math.PI * 2);
+        ctx.arc(dragStartX, dragStartY, 20, 0, PI2);
         ctx.fillStyle = isCancelDrag ? 'rgba(231, 76, 60, 0.3)' : 'rgba(255, 255, 255, 0.15)';
         ctx.fill();
         ctx.lineWidth = 2;
@@ -1672,7 +1683,7 @@ function update() {
         ctx.stroke();
         
         ctx.beginPath();
-        ctx.arc(dragStartX, dragStartY, 4, 0, Math.PI * 2);
+        ctx.arc(dragStartX, dragStartY, 4, 0, PI2);
         ctx.fillStyle = isCancelDrag ? '#e74c3c' : '#ffffff';
         ctx.fill();
         ctx.restore();
@@ -1774,6 +1785,7 @@ function checkCollisionSim(b1, b2, cueBallRef, targetReflectPoints) {
     }
 }
 
+// ★改修: 軌道予測(シミュレーション)の負荷削減のため、ドラッグ条件が変わった時だけ再計算するメモ化(キャッシュ)を導入
 function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
     if (!showGuide) return;
 
@@ -1788,100 +1800,140 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
     let actualCue = balls.find(b => b.isCue);
     if (!actualCue) return;
 
-    let simBalls = balls.map(b => ({
-        x: b.x, y: b.y, vx: 0, vy: 0, z: b.z, 
-        radius: b.radius, mass: b.mass, friction: b.friction,
-        isCue: b.isCue, markedForDeletion: b.markedForDeletion
-    }));
+    const epsilon = 0.5;
+    let useCache = false;
+    if (simCache.dx !== null &&
+        Math.abs(simCache.dx - pullDx) < epsilon &&
+        Math.abs(simCache.dy - pullDy) < epsilon &&
+        simCache.spinX === setSpinX &&
+        simCache.spinY === setSpinY &&
+        Math.abs(simCache.cueX - actualCue.x) < epsilon &&
+        Math.abs(simCache.cueY - actualCue.y) < epsilon) {
+        useCache = true;
+    }
 
-    let simCue = simBalls.find(b => b.isCue);
-    simCue.vx = Math.cos(angle) * initialSpeed;
-    simCue.vy = Math.sin(angle) * initialSpeed;
+    let points, afterReflectPoints, targetReflectPoints, cueBallRef;
 
-    const SUB_STEPS = Math.max(4, Math.ceil(initialSpeed / 4));
+    if (useCache) {
+        points = simCache.points;
+        afterReflectPoints = simCache.afterReflectPoints;
+        targetReflectPoints = simCache.targetReflectPoints;
+        cueBallRef = simCache.cueBallRef;
+    } else {
+        points = [{ x: actualCue.x, y: actualCue.y }];
+        afterReflectPoints = [];
+        targetReflectPoints = [];
+        cueBallRef = { hasReflected: false, hitTarget: null, stopSim: false };
 
-    let spinEnergy = 1.0;
-    let spinMax = 1.0;
-    let sX = setSpinX;
-    let sY = setSpinY;
-
-    let points = [{ x: simCue.x, y: simCue.y }];
-    let afterReflectPoints = [];
-    let targetReflectPoints = [];
-    let cueBallRef = { hasReflected: false, hitTarget: null, stopSim: false };
-
-    const MAX_FRAMES = 100;
-    let stopSim = false;
-
-    for (let f = 0; f < MAX_FRAMES && !stopSim && !cueBallRef.stopSim; f++) {
-        spinMax = Math.max(0, spinMax - 0.0033);
-        spinEnergy = Math.max(0, spinEnergy - 0.016);
-
-        for (let step = 0; step < SUB_STEPS; step++) {
-            
-            if (simCue && !simCue.markedForDeletion && spinEnergy > 0 && (sX !== 0 || sY !== 0)) {
-                let speed = Math.hypot(simCue.vx, simCue.vy);
-                if (speed > 0.2) {
-                    let dirX = simCue.vx / speed; let dirY = simCue.vy / speed;
-                    let rightX = -dirY; let rightY = dirX;
-                    let spinForce = 6.0 * spinEnergy;
-                    let forceForward = -sY * spinForce * 0.5;
-                    let forceSide = sX * spinForce * 2.2;
-                    simCue.vx += (dirX * forceForward + rightX * forceSide) / SUB_STEPS;
-                    simCue.vy += (dirY * forceForward + rightY * forceSide) / SUB_STEPS;
-                }
-            }
-
-            simBalls.forEach(b => { b.x += b.vx / SUB_STEPS; b.y += b.vy / SUB_STEPS; });
-
-            for(let i=0; i<simBalls.length; i++) {
-                for(let j=i+1; j<simBalls.length; j++) {
-                    if(!simBalls[i].markedForDeletion && !simBalls[j].markedForDeletion) {
-                        checkCollisionSim(simBalls[i], simBalls[j], cueBallRef, targetReflectPoints);
-                    }
-                }
-            }
-            
-            simBalls.forEach(b => {
-                if (b.markedForDeletion) return;
-                let hit = false;
-                if(b.x - b.radius < 0) { b.x = b.radius; b.vx = Math.abs(b.vx) * RESTITUTION; hit = true; }
-                if(b.x + b.radius > cw) { b.x = cw - b.radius; b.vx = -Math.abs(b.vx) * RESTITUTION; hit = true; }
-                if(b.y - b.radius < 0) { b.y = b.radius; b.vy = Math.abs(b.vy) * RESTITUTION; hit = true; }
-                if(b.y + b.radius > ch) { b.y = ch - b.radius; b.vy = -Math.abs(b.vy) * RESTITUTION; hit = true; }
-                if(hit && Math.hypot(b.vx, b.vy) < 0.1) { b.vx = 0; b.vy = 0; }
-                
-                if (hit && b.isCue) {
-                    if (!cueBallRef.hasReflected) {
-                        cueBallRef.hasReflected = true;
-                    } else {
-                        cueBallRef.stopSim = true;
-                    }
-                }
-                
-                if (step === SUB_STEPS - 1) {
-                    b.vx *= b.friction; 
-                    b.vy *= b.friction;
-                }
+        let simBalls = [];
+        for (let i = 0; i < balls.length; i++) {
+            let b = balls[i];
+            simBalls.push({
+                x: b.x, y: b.y, vx: 0, vy: 0, z: b.z, 
+                radius: b.radius, mass: b.mass, friction: b.friction,
+                isCue: b.isCue, markedForDeletion: b.markedForDeletion
             });
+        }
 
-            simCue = simBalls.find(b => b.isCue && !b.markedForDeletion);
-            if (!simCue || Math.hypot(simCue.vx, simCue.vy) < STOP_THRESHOLD) {
-                stopSim = true;
-                break;
-            }
+        let simCue = simBalls.find(b => b.isCue);
+        simCue.vx = Math.cos(angle) * initialSpeed;
+        simCue.vy = Math.sin(angle) * initialSpeed;
 
-            if (step === SUB_STEPS - 1) {
-                if (!cueBallRef.hasReflected) {
-                    points.push({ x: simCue.x, y: simCue.y });
-                } else {
-                    afterReflectPoints.push({ x: simCue.x, y: simCue.y });
-                    if (cueBallRef.hitTarget && !cueBallRef.hitTarget.markedForDeletion) {
-                        targetReflectPoints.push({ x: cueBallRef.hitTarget.x, y: cueBallRef.hitTarget.y });
+        const SUB_STEPS = Math.max(4, Math.ceil(initialSpeed / 4));
+
+        let spinEnergy = 1.0;
+        let spinMax = 1.0;
+        let sX = setSpinX;
+        let sY = setSpinY;
+
+        const MAX_FRAMES = 100;
+        let stopSim = false;
+
+        for (let f = 0; f < MAX_FRAMES && !stopSim && !cueBallRef.stopSim; f++) {
+            spinMax = Math.max(0, spinMax - 0.0033);
+            spinEnergy = Math.max(0, spinEnergy - 0.016);
+
+            for (let step = 0; step < SUB_STEPS; step++) {
+                
+                if (simCue && !simCue.markedForDeletion && spinEnergy > 0 && (sX !== 0 || sY !== 0)) {
+                    let speed = Math.hypot(simCue.vx, simCue.vy);
+                    if (speed > 0.2) {
+                        let dirX = simCue.vx / speed; let dirY = simCue.vy / speed;
+                        let rightX = -dirY; let rightY = dirX;
+                        let spinForce = 6.0 * spinEnergy;
+                        let forceForward = -sY * spinForce * 0.5;
+                        let forceSide = sX * spinForce * 2.2;
+                        simCue.vx += (dirX * forceForward + rightX * forceSide) / SUB_STEPS;
+                        simCue.vy += (dirY * forceForward + rightY * forceSide) / SUB_STEPS;
+                    }
+                }
+
+                for (let i = 0; i < simBalls.length; i++) {
+                    simBalls[i].x += simBalls[i].vx / SUB_STEPS;
+                    simBalls[i].y += simBalls[i].vy / SUB_STEPS;
+                }
+
+                for(let i=0; i<simBalls.length; i++) {
+                    for(let j=i+1; j<simBalls.length; j++) {
+                        if(!simBalls[i].markedForDeletion && !simBalls[j].markedForDeletion) {
+                            checkCollisionSim(simBalls[i], simBalls[j], cueBallRef, targetReflectPoints);
+                        }
+                    }
+                }
+                
+                for (let i = 0; i < simBalls.length; i++) {
+                    let b = simBalls[i];
+                    if (b.markedForDeletion) continue;
+                    let hit = false;
+                    if(b.x - b.radius < 0) { b.x = b.radius; b.vx = Math.abs(b.vx) * RESTITUTION; hit = true; }
+                    if(b.x + b.radius > cw) { b.x = cw - b.radius; b.vx = -Math.abs(b.vx) * RESTITUTION; hit = true; }
+                    if(b.y - b.radius < 0) { b.y = b.radius; b.vy = Math.abs(b.vy) * RESTITUTION; hit = true; }
+                    if(b.y + b.radius > ch) { b.y = ch - b.radius; b.vy = -Math.abs(b.vy) * RESTITUTION; hit = true; }
+                    if(hit && Math.hypot(b.vx, b.vy) < 0.1) { b.vx = 0; b.vy = 0; }
+                    
+                    if (hit && b.isCue) {
+                        if (!cueBallRef.hasReflected) {
+                            cueBallRef.hasReflected = true;
+                        } else {
+                            cueBallRef.stopSim = true;
+                        }
+                    }
+                    
+                    if (step === SUB_STEPS - 1) {
+                        b.vx *= b.friction; 
+                        b.vy *= b.friction;
+                    }
+                }
+
+                simCue = simBalls.find(b => b.isCue && !b.markedForDeletion);
+                if (!simCue || Math.hypot(simCue.vx, simCue.vy) < STOP_THRESHOLD) {
+                    stopSim = true;
+                    break;
+                }
+
+                if (step === SUB_STEPS - 1) {
+                    if (!cueBallRef.hasReflected) {
+                        points.push({ x: simCue.x, y: simCue.y });
+                    } else {
+                        afterReflectPoints.push({ x: simCue.x, y: simCue.y });
+                        if (cueBallRef.hitTarget && !cueBallRef.hitTarget.markedForDeletion) {
+                            targetReflectPoints.push({ x: cueBallRef.hitTarget.x, y: cueBallRef.hitTarget.y });
+                        }
                     }
                 }
             }
         }
+
+        simCache.dx = pullDx;
+        simCache.dy = pullDy;
+        simCache.spinX = setSpinX;
+        simCache.spinY = setSpinY;
+        simCache.cueX = actualCue.x;
+        simCache.cueY = actualCue.y;
+        simCache.points = points;
+        simCache.afterReflectPoints = afterReflectPoints;
+        simCache.targetReflectPoints = targetReflectPoints;
+        simCache.cueBallRef = cueBallRef;
     }
 
     ctx.save();
@@ -1906,7 +1958,7 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
         let reflectPoint = points[points.length - 1];
         
         ctx.beginPath();
-        ctx.arc(reflectPoint.x, reflectPoint.y, actualCue.radius, 0, Math.PI * 2);
+        ctx.arc(reflectPoint.x, reflectPoint.y, actualCue.radius, 0, PI2);
         ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
         ctx.lineWidth = 2.5;
         ctx.setLineDash([4, 4]);
@@ -1914,7 +1966,7 @@ function drawSpinArrow(ctx, startX, startY, pullDx, pullDy) {
         ctx.setLineDash([]);
 
         ctx.beginPath();
-        ctx.arc(reflectPoint.x, reflectPoint.y, 5, 0, Math.PI * 2);
+        ctx.arc(reflectPoint.x, reflectPoint.y, 5, 0, PI2);
         ctx.fillStyle = '#e74c3c';
         ctx.fill();
 
@@ -2037,8 +2089,8 @@ function checkCollision(b1, b2) {
 
                     let randAngle = Math.atan2(b1.vy - b2.vy, b1.vx - b2.vx);
                     let angle1 = randAngle;
-                    let angle2 = randAngle + Math.PI * 2 / 3;
-                    let angle3 = randAngle + Math.PI * 4 / 3;
+                    let angle2 = randAngle + PI2 / 3;
+                    let angle3 = randAngle + (Math.PI * 4) / 3;
 
                     let cr1 = 26 + Math.sqrt(z1) * 2.5;
                     let cr2 = 26 + Math.sqrt(z2) * 2.5;
@@ -2129,10 +2181,10 @@ function processFissions() {
             let z1 = Math.max(1, Math.floor(b.z / 2));
             let z2 = Math.max(1, b.z - z1);
             
-            let randAngle = Math.random() * Math.PI * 2;
+            let randAngle = Math.random() * PI2;
             let angle1 = randAngle;
-            let angle2 = randAngle + Math.PI * 2 / 3;
-            let angle3 = randAngle + Math.PI * 4 / 3;
+            let angle2 = randAngle + PI2 / 3;
+            let angle3 = randAngle + (Math.PI * 4) / 3;
 
             let cr1 = 26 + Math.sqrt(z1) * 2.5;
             let cr2 = 26 + Math.sqrt(z2) * 2.5;
@@ -2243,6 +2295,9 @@ function endTurn() {
     resetSpinUI();
     isDragging = false;
     isCancelDrag = false;
+    
+    // キャッシュクリア
+    simCache.dx = null;
 
     updateUI();
 }
@@ -2292,7 +2347,6 @@ function updateUI() {
         if (spinUI) { spinUI.style.opacity = '0.4'; spinUI.style.pointerEvents = 'none'; }
     }
 
-    // ★改修: 任意の原子を選ぶターンの明滅切り替え
     if (gameState === 'SELECT_ANY') {
         boardWrapper.classList.add('select-any-mode');
         uiHint.classList.add('select-any-mode-text');
@@ -2424,6 +2478,7 @@ window.addEventListener('pointerdown', e => {
                 dragStartY = pos.y;
                 dragCurrentX = pos.x; 
                 dragCurrentY = pos.y;
+                simCache.dx = null; // キャッシュクリア
             }
         }
     } else if (gameState === 'MOVING') {
@@ -2497,7 +2552,6 @@ window.addEventListener('pointerup', e => {
     }
 });
 
-// ★改修: Androidでのカクツキ・もたつき防止用タッチジェスチャーブロック
 window.addEventListener('touchstart', e => {
     if (e.target === canvas || e.target === spinUI || spinUI.contains(e.target)) {
         e.preventDefault();
@@ -2510,7 +2564,6 @@ window.addEventListener('touchmove', e => {
     }
 }, { passive: false });
 
-// ★改修: PWAマニフェストによるAndroid回転ロックの解除試行
 window.addEventListener('load', () => {
     try {
         if (screen.orientation && screen.orientation.unlock) {
