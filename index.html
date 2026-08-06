@@ -25,6 +25,10 @@
             
             --cell-seen: #889e5c;      /* 出現済み：落ち着いたグリーンチョーク色 */
             --cell-cleared: #d4af37;   /* クリア生成済み：アンティークゴールド */
+            
+            /* ゲージ制御用変数 */
+            --gauge-fill-critical: 0%;
+            --gauge-fill-spin: 100%;
         }
 
         body {
@@ -167,6 +171,7 @@
                 display: flex; justify-content: center; align-items: center;
                 position: relative; overflow: hidden;
                 box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+                transition: border-color 0.2s, box-shadow 0.2s;
             }
             #game-ui-bottom {
                 width: 100%; padding: 8px 12px; box-sizing: border-box;
@@ -200,6 +205,7 @@
                 display: flex; justify-content: center; align-items: center;
                 position: relative; overflow: hidden;
                 box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+                transition: border-color 0.2s, box-shadow 0.2s;
             }
             #game-ui-top { display: none; }
             #game-ui-bottom {
@@ -261,8 +267,9 @@
             background: var(--box-bg); padding: 6px 8px; border-radius: 8px;
             font-weight: bold; text-align: center; box-sizing: border-box;
             line-height: 1.3; border: 1px solid #3e5645;
-            height: 90px; /* ★内容変化時のガタつき防止で固定 */
+            height: 90px;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
+            transition: all 0.2s;
         }
 
         .cue-status-group {
@@ -350,10 +357,9 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
 
-        /* 臨界ゲージ */
-        #critical-gauge {
+        /* 臨界ゲージ & スピンゲージ (縦画面基準・CSS変数連動) */
+        #critical-gauge, #spin-time-gauge {
             position: absolute;
-            right: 10px;
             top: 50%;
             transform: translateY(-50%);
             display: flex;
@@ -364,15 +370,21 @@
             pointer-events: none;
             opacity: 0.85;
         }
-        .critical-text {
-            color: #e74c3c;
+        
+        #critical-gauge { right: 10px; }
+        #spin-time-gauge { left: 10px; }
+
+        .critical-text, .spin-time-text {
             font-size: 0.8rem;
             font-weight: bold;
             writing-mode: vertical-rl;
             letter-spacing: 2px;
             text-shadow: 0 0 4px rgba(0,0,0,0.8);
         }
-        .critical-bar {
+        .critical-text { color: #e74c3c; }
+        .spin-time-text { color: #3498db; }
+
+        .critical-bar, .spin-time-bar {
             width: 14px;
             height: 250px;
             background: rgba(10, 20, 14, 0.8);
@@ -383,59 +395,80 @@
             justify-content: flex-end;
             overflow: hidden;
             box-shadow: inset 0 0 5px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5);
+        }
+        
+        #critical-fill, #spin-time-fill {
+            width: 100%;
+            transition: height 0.1s linear, width 0.1s linear;
         }
         #critical-fill {
-            width: 100%;
-            height: 0%;
+            height: var(--gauge-fill-critical);
             background: linear-gradient(to top, #f39c12, #e67e22, #e74c3c);
-            transition: height 0.1s linear;
-        }
-
-        /* スピン残り時間ゲージ */
-        #spin-time-gauge {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            z-index: 50;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        @media (orientation: portrait) {
-            #spin-time-gauge {
-                display: flex;
-            }
-        }
-        .spin-time-text {
-            color: #3498db;
-            font-size: 0.8rem;
-            font-weight: bold;
-            writing-mode: vertical-rl;
-            letter-spacing: 2px;
-            text-shadow: 0 0 4px rgba(0,0,0,0.8);
-        }
-        .spin-time-bar {
-            width: 14px;
-            height: 250px;
-            background: rgba(10, 20, 14, 0.8);
-            border: 2px solid #3e5645;
-            border-radius: 7px;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            overflow: hidden;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5);
         }
         #spin-time-fill {
-            width: 100%;
-            height: 100%;
+            height: var(--gauge-fill-spin);
             background: linear-gradient(to top, #2980b9, #3498db, #85c1e9);
-            transition: height 0.1s linear;
+        }
+
+        /* 横画面時のゲージ配置 (上下配置へ変更) */
+        @media (orientation: landscape) {
+            #critical-gauge {
+                right: auto;
+                left: 50%;
+                top: 10px;
+                transform: translateX(-50%);
+                flex-direction: row;
+            }
+            .critical-bar {
+                width: 250px;
+                height: 14px;
+                flex-direction: row;
+                justify-content: flex-start;
+            }
+            #critical-fill {
+                height: 100%;
+                width: var(--gauge-fill-critical);
+                background: linear-gradient(to right, #f39c12, #e67e22, #e74c3c);
+            }
+            .critical-text { writing-mode: horizontal-tb; }
+
+            #spin-time-gauge {
+                left: 50%;
+                top: auto;
+                bottom: 10px;
+                transform: translateX(-50%);
+                flex-direction: row;
+            }
+            .spin-time-bar {
+                width: 250px;
+                height: 14px;
+                flex-direction: row;
+                justify-content: flex-start;
+            }
+            #spin-time-fill {
+                height: 100%;
+                width: var(--gauge-fill-spin);
+                background: linear-gradient(to right, #2980b9, #3498db, #85c1e9);
+            }
+            .spin-time-text { writing-mode: horizontal-tb; }
+        }
+
+        /* SELECT_ANY 明滅アニメーション */
+        @keyframes blinkSelect {
+            0% { box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 5px rgba(212, 175, 55, 0.5); border-color: var(--board-border); }
+            50% { box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 20px rgba(212, 175, 55, 1); border-color: #d4af37; }
+            100% { box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 5px rgba(212, 175, 55, 0.5); border-color: var(--board-border); }
+        }
+        .select-any-mode {
+            animation: blinkSelect 1.5s infinite;
+        }
+        @keyframes textBlinkSelect {
+            0% { color: var(--text-main); text-shadow: none; border-color: #3e5645; }
+            50% { color: #fff; text-shadow: 0 0 8px #d4af37; border-color: #d4af37; }
+            100% { color: var(--text-main); text-shadow: none; border-color: #3e5645; }
+        }
+        .select-any-mode-text {
+            animation: textBlinkSelect 1.5s infinite !important;
         }
     </style>
 </head>
@@ -527,8 +560,8 @@
 
             <!-- レイヤー2：ゲームエリア外枠クッション -->
             <div id="game-board-wrapper">
-                <!-- レイヤー3：原子移動エリア (Canvas) -->
-                <canvas id="gameCanvas"></canvas>
+                <!-- レイヤー3：原子移動エリア (Canvas) touch-action: none; 追加でタッチ競合防止 -->
+                <canvas id="gameCanvas" style="touch-action: none;"></canvas>
 
                 <!-- スピン残り時間ゲージ -->
                 <div id="spin-time-gauge">
@@ -709,15 +742,12 @@
    オーディオ管理 (BGM / SE) - Web Audio API 対応版
 ===================================================================== */
 
-// --- Web Audio API の初期化 ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCtx = new AudioContext();
 
-// SE全体の音量を制御するための GainNode
 const seGainNode = audioCtx.createGain();
 seGainNode.connect(audioCtx.destination);
 
-// デコード済みの音声データを保持する変数
 let decideBuffer = null;
 let cancelBuffer = null;
 let shootBuffer = null;
@@ -725,7 +755,6 @@ let collideBuffer = null;
 let fissionBuffer = null;
 let selectBuffer = null;
 
-// 音声ファイルを非同期で読み込み、バッファに変換する関数
 async function loadAudioBuffer(url) {
     try {
         const response = await fetch(url);
@@ -737,7 +766,6 @@ async function loadAudioBuffer(url) {
     }
 }
 
-// 初期化時にSEを事前ロード
 loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768898/oamshw3mojs1snz7mfqp_tdwqbp.m4a')
     .then(buffer => decideBuffer = buffer);
 loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768899/ffxuqelyqtnus0yfckts_t2jttx.m4a')
@@ -751,55 +779,41 @@ loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785836070/%E
 loadAudioBuffer('https://res.cloudinary.com/whuoxjx3/video/upload/v1785849800/%E3%83%93%E3%83%AA%E3%83%A4%E3%83%BC%E3%83%89%E3%81%AE%E3%82%B7%E3%83%A7%E3%83%83%E3%83%88_oetdhs.m4a')
     .then(buffer => selectBuffer = buffer);
 
-// --- BGMの設定 (長尺なので HTML5 Audio のままが推奨されます) ---
 const bgmAudio = new Audio('https://res.cloudinary.com/whuoxjx3/video/upload/v1785768472/atommic_billiards_loop_fqnn47.m4a');
 bgmAudio.loop = true;
 let isBgmPlaying = false;
 
-// ボリューム設定読み込み
 let savedBgmVol = parseFloat(localStorage.getItem('fusionBgmVolume'));
 let savedSeVol = parseFloat(localStorage.getItem('fusionSeVolume'));
 if (isNaN(savedBgmVol)) savedBgmVol = 0.4;
 if (isNaN(savedSeVol)) savedSeVol = 0.8;
 
 bgmAudio.volume = savedBgmVol;
-seGainNode.gain.value = savedSeVol; // SEの初期音量を設定
+seGainNode.gain.value = savedSeVol;
 
-// 初期UI反映
 document.getElementById('bgm-slider').value = savedBgmVol;
 document.getElementById('se-slider').value = savedSeVol;
 document.getElementById('bgm-val').innerText = Math.round(savedBgmVol * 100) + '%';
 document.getElementById('se-val').innerText = Math.round(savedSeVol * 100) + '%';
 
-// アプリケーションがバックグラウンドに移動した際のBGM制御
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        if (isBgmPlaying) {
-            bgmAudio.pause();
-        }
-        if (audioCtx.state === 'running') {
-            audioCtx.suspend();
-        }
+        if (isBgmPlaying) bgmAudio.pause();
+        if (audioCtx.state === 'running') audioCtx.suspend();
     } else {
-        if (isBgmPlaying && savedBgmVol > 0) {
-            bgmAudio.play().catch(e => console.log("BGM再開エラー:", e));
-        }
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+        if (isBgmPlaying && savedBgmVol > 0) bgmAudio.play().catch(e => console.log("BGM再開エラー:", e));
+        if (audioCtx.state === 'suspended') audioCtx.resume();
     }
 });
 
-// ボリューム変更イベント
 document.getElementById('bgm-slider').addEventListener('input', e => {
     let vol = parseFloat(e.target.value);
     bgmAudio.volume = vol;
-    savedBgmVol = vol; // バックグラウンド復帰時の判定用に更新
+    savedBgmVol = vol;
     document.getElementById('bgm-val').innerText = Math.round(vol * 100) + '%';
     localStorage.setItem('fusionBgmVolume', vol);
 });
 
-// 既存のHTML5 Audioのvolume変更処理を、GainNodeの変更処理に差し替え
 document.getElementById('se-slider').addEventListener('input', e => {
     let vol = parseFloat(e.target.value);
     seGainNode.gain.value = vol;
@@ -808,93 +822,53 @@ document.getElementById('se-slider').addEventListener('input', e => {
 });
 
 document.getElementById('se-slider').addEventListener('change', e => {
-    playSeDecide(); // 変更後に確認音を鳴らす
+    playSeDecide();
 });
 
 function playBgm() {
     if (!isBgmPlaying) {
-        bgmAudio.play().then(() => {
-            isBgmPlaying = true;
-        }).catch(e => console.log("BGM自動再生ブロック:", e));
+        bgmAudio.play().then(() => { isBgmPlaying = true; }).catch(e => console.log("BGM自動再生ブロック:", e));
     }
-    
-    // ユーザー操作時に Web Audio API のサスペンド状態を解除する（ブラウザの自動再生ポリシー対応）
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
-// --- 指定範囲を切り出して再生する共通関数 ---
 function playAudioSlice(buffer, startTime, duration) {
-    if (!buffer) return; // 読み込み完了前は処理をスキップ
-
-    // BufferSourceを作成 (再生のたびに使い捨てのノードを作成するのがWeb Audio APIの仕様です)
+    if (!buffer) return;
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
-    
-    // 音量管理ノードへ接続
     source.connect(seGainNode);
-    
-    // 再生実行: start(いつ再生するか, どこから再生するか, どれだけの時間再生するか)
     source.start(0, startTime, duration);
 }
 
-// フル尺で再生する関数 (必要に応じて音量調整用ローカルGain追加)
 function playAudioFull(buffer, maxVolume = 1.0) {
     if (!buffer) return;
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
-    
     const localGain = audioCtx.createGain();
     localGain.gain.value = maxVolume;
-    
     source.connect(localGain);
     localGain.connect(seGainNode);
-    
     source.start(0);
 }
 
-// 0.015秒～0.3秒を再生 (再生時間は 0.3 - 0.015 = 0.285秒)
-function playSeDecide() {
-    playBgm();
-    playAudioSlice(decideBuffer, 0.015, 0.285);
-}
-
-// 0.019秒～0.127秒を再生 (再生時間は 0.127 - 0.019 = 0.108秒)
-function playSeCancel() {
-    playBgm();
-    playAudioSlice(cancelBuffer, 0.019, 0.108);
-}
-
-function playSeShoot() {
-    playBgm();
-    playAudioFull(shootBuffer);
-}
+function playSeDecide() { playBgm(); playAudioSlice(decideBuffer, 0.015, 0.285); }
+function playSeCancel() { playBgm(); playAudioSlice(cancelBuffer, 0.019, 0.108); }
+function playSeShoot() { playBgm(); playAudioFull(shootBuffer); }
 
 let lastCollideTime = 0;
 function playSeCollide(intensity) {
     let now = Date.now();
     if (now - lastCollideTime < 30) return;
     lastCollideTime = now;
-    
     playBgm();
     let vol = Math.min(1.0, intensity / 20);
     if (vol < 0.05) return;
-    
     playAudioFull(collideBuffer, vol);
 }
 
-function playSeFission() {
-    playBgm();
-    playAudioFull(fissionBuffer);
-}
+function playSeFission() { playBgm(); playAudioFull(fissionBuffer); }
+function playSeSelect() { playBgm(); playAudioFull(selectBuffer); }
 
-function playSeSelect() {
-    playBgm();
-    playAudioFull(selectBuffer);
-}
-
-// 初回タップでBGM再生とAudioContextの有効化
 document.body.addEventListener('pointerdown', playBgm, { once: true });
 
 
@@ -1108,7 +1082,7 @@ function returnToTitle() {
     criticalValue = 0;
     meltdownStartTime = 0;
     let fillEl = document.getElementById('critical-fill');
-    if (fillEl) fillEl.style.height = '0%';
+    if (fillEl) fillEl.style.setProperty('--gauge-fill-critical', '0%');
 
     switchScreen('title-screen');
 }
@@ -1515,7 +1489,7 @@ function nextStage(isInitial = false) {
     criticalValue = 0;
     meltdownStartTime = 0;
     let fillEl = document.getElementById('critical-fill');
-    if (fillEl) fillEl.style.height = '0%';
+    if (fillEl) fillEl.style.setProperty('--gauge-fill-critical', '0%');
     
     let initialCount = Math.floor(Math.random() * 3) + 3;
     for(let i = 0; i < initialCount; i++) {
@@ -1554,47 +1528,41 @@ function update() {
     
     // --- 臨界ゲージ処理 ---
     if (gameState !== 'GAMEOVER') {
-        if (criticalValue > 0) {
+        if (criticalValue > 0 && criticalValue < CRITICAL_MAX) {
             criticalValue -= 0.5;
             if (criticalValue < 0) criticalValue = 0;
         }
         let fillEl = document.getElementById('critical-fill');
         if (fillEl) {
-            fillEl.style.height = `${Math.min(100, (criticalValue / CRITICAL_MAX) * 100)}%`;
+            fillEl.style.setProperty('--gauge-fill-critical', `${Math.min(100, (criticalValue / CRITICAL_MAX) * 100)}%`);
         }
         
         if (criticalValue >= CRITICAL_MAX) {
             if (meltdownStartTime === 0) {
                 meltdownStartTime = Date.now();
-            } else if (Date.now() - meltdownStartTime >= 5000) {
+            } else if (Date.now() - meltdownStartTime >= 10000) { // ★改修: 10秒メルトダウン
                 triggerMeltdown();
             }
         } else {
             meltdownStartTime = 0;
         }
     }
-    // -----------------------
 
     // --- スピン残り時間ゲージ処理 ---
-    let spinGauge = document.getElementById('spin-time-gauge');
     let spinFillEl = document.getElementById('spin-time-fill');
     if (gameState === 'MOVING') {
         let timeElapsed = Date.now() - shootTime;
         if (timeElapsed <= 5000) {
-            if (spinGauge) spinGauge.style.opacity = '0.85';
             let remainPercent = Math.max(0, 100 - (timeElapsed / 5000) * 100);
             if (spinFillEl) {
-                spinFillEl.style.height = `${remainPercent}%`;
+                spinFillEl.style.setProperty('--gauge-fill-spin', `${remainPercent}%`);
             }
         } else {
-            if (spinGauge) spinGauge.style.opacity = '0';
-            if (spinFillEl) spinFillEl.style.height = '0%';
+            if (spinFillEl) spinFillEl.style.setProperty('--gauge-fill-spin', `0%`);
         }
     } else {
-        if (spinGauge) spinGauge.style.opacity = '0';
-        if (spinFillEl) spinFillEl.style.height = '100%';
+        if (spinFillEl) spinFillEl.style.setProperty('--gauge-fill-spin', `100%`);
     }
-    // -----------------------
 
     ctx.clearRect(0, 0, cw, ch);
     
@@ -1691,9 +1659,26 @@ function update() {
     particles = particles.filter(p => p.life > 0);
     particles.forEach(p => p.draw(ctx));
     
-    if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging && !isCancelDrag) {
+    // ★改修: 引っ張り時のタップ位置・キャンセル目安のシャドー表示
+    if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(dragStartX, dragStartY, 20, 0, Math.PI * 2);
+        ctx.fillStyle = isCancelDrag ? 'rgba(231, 76, 60, 0.3)' : 'rgba(255, 255, 255, 0.15)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isCancelDrag ? 'rgba(231, 76, 60, 0.8)' : 'rgba(255, 255, 255, 0.5)';
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(dragStartX, dragStartY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = isCancelDrag ? '#e74c3c' : '#ffffff';
+        ctx.fill();
+        ctx.restore();
+
         let cue = balls.find(b => b.isCue);
-        if(cue) {
+        if(cue && !isCancelDrag) {
             let dx = dragStartX - dragCurrentX;
             let dy = dragStartY - dragCurrentY;
             let pullDist = Math.hypot(dx, dy);
@@ -2282,16 +2267,18 @@ function updateUI() {
     document.getElementById('ui-atoms-side').innerText = `${atomsCount}/50`;
     
     let spinUI = document.getElementById('spin-ui');
+    let boardWrapper = document.getElementById('game-board-wrapper');
+    let uiHint = document.getElementById('ui-hint');
     
     if (gameState === 'IDLE') {
-        document.getElementById('ui-hint').innerHTML = '画面のどこからでも引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(タップした指を元の位置に戻すとキャンセル)</span>';
+        uiHint.innerHTML = '画面のどこからでも引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(タップした指を元の位置に戻すとキャンセル)</span>';
         if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
     } else if (gameState === 'SELECT_ANY') {
-        document.getElementById('ui-hint').innerHTML = '盤上の好きな原子を選んでください！<br><span style="font-size:0.8em; font-weight:normal;">(このターンは任意の原子を打てます)</span>';
+        uiHint.innerHTML = '盤上の好きな原子を選んでください！<br><span style="font-size:0.8em; font-weight:normal;">(このターンは任意の原子を打てます)</span>';
         document.getElementById('ui-current-val').innerText = '任意';
         if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
     } else if (gameState === 'IDLE_ANY') {
-        document.getElementById('ui-hint').innerHTML = '引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(打つ原子を変えるには下のChangeを押す)</span>' 
+        uiHint.innerHTML = '引っ張って発射！<br><span style="font-size:0.8em; font-weight:normal;">(打つ原子を変えるには下のChangeを押す)</span>' 
             + '<br><button onclick="playSeCancel(); window.cancelAnySelection()" style="padding:2px 10px; font-size:0.75rem; font-weight:bold; border-radius:4px; border:1px solid #aaa; background:#c0392b; color:#fff; cursor:pointer; margin-top:5px; box-shadow:0 2px 4px rgba(0,0,0,0.5);">🔄 Change</button>';
         
         let cue = balls.find(b => b.isCue);
@@ -2301,8 +2288,17 @@ function updateUI() {
         }
         if (spinUI) { spinUI.style.opacity = '1'; spinUI.style.pointerEvents = 'auto'; }
     } else { // MOVING
-        document.getElementById('ui-hint').innerHTML = '画面タップ連打でスピンを維持！<br><span style="font-size:0.8em; font-weight:normal;">(発射から5秒間有効)</span>';
+        uiHint.innerHTML = '画面タップ連打でスピンを維持！<br><span style="font-size:0.8em; font-weight:normal;">(発射から5秒間有効)</span>';
         if (spinUI) { spinUI.style.opacity = '0.4'; spinUI.style.pointerEvents = 'none'; }
+    }
+
+    // ★改修: 任意の原子を選ぶターンの明滅切り替え
+    if (gameState === 'SELECT_ANY') {
+        boardWrapper.classList.add('select-any-mode');
+        uiHint.classList.add('select-any-mode-text');
+    } else {
+        boardWrapper.classList.remove('select-any-mode');
+        uiHint.classList.remove('select-any-mode-text');
     }
 }
 
@@ -2500,6 +2496,29 @@ window.addEventListener('pointerup', e => {
         }
     }
 });
+
+// ★改修: Androidでのカクツキ・もたつき防止用タッチジェスチャーブロック
+window.addEventListener('touchstart', e => {
+    if (e.target === canvas || e.target === spinUI || spinUI.contains(e.target)) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+window.addEventListener('touchmove', e => {
+    if (e.target === canvas || e.target === spinUI || spinUI.contains(e.target)) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+// ★改修: PWAマニフェストによるAndroid回転ロックの解除試行
+window.addEventListener('load', () => {
+    try {
+        if (screen.orientation && screen.orientation.unlock) {
+            screen.orientation.unlock().catch(() => {});
+        }
+    } catch(e) {}
+});
+
 </script>
     <script>
   if ('serviceWorker' in navigator) {
