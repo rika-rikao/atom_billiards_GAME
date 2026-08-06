@@ -1674,7 +1674,8 @@ function update() {
     if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(dragStartX, dragStartY, 20, 0, PI2);
+        // ★改修: キャンセル判定領域(シャドウ)を大きく(半径45に変更)
+        ctx.arc(dragStartX, dragStartY, 45, 0, PI2);
         ctx.fillStyle = isCancelDrag ? 'rgba(231, 76, 60, 0.3)' : 'rgba(255, 255, 255, 0.15)';
         ctx.fill();
         ctx.lineWidth = 2;
@@ -2499,7 +2500,8 @@ window.addEventListener('pointermove', e => {
         let cue = balls.find(b => b.isCue);
         if (cue) {
             let distFromStart = Math.hypot(pos.x - dragStartX, pos.y - dragStartY);
-            if (distFromStart <= 20) { 
+            // ★改修: キャンセル判定距離を大きく(45pxに変更)
+            if (distFromStart <= 45) { 
                 isCancelDrag = true;
             } else {
                 isCancelDrag = false;
