@@ -1540,7 +1540,7 @@ function update() {
     
     // --- 臨界ゲージ処理 ---
     if (gameState !== 'GAMEOVER') {
-        if (criticalValue > 0 && criticalValue < CRITICAL_MAX) {
+        if (criticalValue > 0) {
             criticalValue -= 0.5;
             if (criticalValue < 0) criticalValue = 0;
         }
@@ -1672,9 +1672,12 @@ function update() {
     particles.forEach(p => p.draw(ctx));
     
     if((gameState === 'IDLE' || gameState === 'IDLE_ANY') && isDragging) {
+        let cue = balls.find(b => b.isCue);
+        let shadowRadius = cue ? cue.radius * 1.2 : 20;
+
         ctx.save();
         ctx.beginPath();
-        ctx.arc(dragStartX, dragStartY, 20, 0, PI2);
+        ctx.arc(dragStartX, dragStartY, shadowRadius, 0, PI2);
         ctx.fillStyle = isCancelDrag ? 'rgba(231, 76, 60, 0.3)' : 'rgba(255, 255, 255, 0.15)';
         ctx.fill();
         ctx.lineWidth = 2;
@@ -1688,7 +1691,6 @@ function update() {
         ctx.fill();
         ctx.restore();
 
-        let cue = balls.find(b => b.isCue);
         if(cue && !isCancelDrag) {
             let dx = dragStartX - dragCurrentX;
             let dy = dragStartY - dragCurrentY;
